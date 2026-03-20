@@ -1,6 +1,6 @@
 {
   "name": "@linked365/webresourcemanager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Web Resource Manager",
   "description": "A PPTB tool to manage web resources in Power Platform.",
   "main": "index.html",
@@ -19,7 +19,7 @@
   "configurations": {
     "repository": "https://github.com/LinkeD365/WebResourceManager",
     "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/WebResourceManager/main/README.md",
-    "website":"https://linked365.blog"
+    "website": "https://linked365.blog"
   },
   "homepage": "https://github.com/LinkeD365/WebResourceManager",
   "repository": {
@@ -38,7 +38,7 @@
     "watch": "vite build --watch",
     "preview": "vite preview",
     "finalize-package": "npm shrinkwrap",
-     "validate": "pptb-validate"
+    "validate": "pptb-validate"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.72.7",
