@@ -4,8 +4,31 @@
   "displayName": "Web Resource Manager",
   "description": "A PPTB tool to manage web resources in Power Platform.",
   "main": "index.html",
-  "author": "LinkeD365",
+  "icon": "Linked365Logo.svg",
   "license": "MIT",
+  "contributors": [
+    {
+      "name": "LinkeD365",
+      "url": "https://github.com/LinkeD365"
+    },
+    {
+      "name": "MsCRMTools",
+      "url": "https://github.com/MsCRMTools"
+    }
+  ],
+  "configurations": {
+    "repository": "https://github.com/LinkeD365/WebResourceManager",
+    "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/WebResourceManager/main/README.md",
+    "website":"https://linked365.blog"
+  },
+  "homepage": "https://github.com/LinkeD365/WebResourceManager",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LinkeD365/WebResourceManager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LinkeD365/WebResourceManager/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
@@ -14,12 +37,15 @@
     "dev": "vite",
     "watch": "vite build --watch",
     "preview": "vite preview",
-    "finalize-package": "npm shrinkwrap"
+    "finalize-package": "npm shrinkwrap",
+     "validate": "pptb-validate"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.72.7",
     "@fluentui/react-icons": "^2.0.314",
     "ace-builds": "^1.43.6",
+    "ag-grid-community": "^35.1.0",
+    "ag-grid-react": "^35.1.0",
     "allotment": "^1.20.5",
     "js-beautify": "^1.8.8",
     "mobx": "^6.15.0",
@@ -31,7 +57,7 @@
     "terser": "^5.46.0"
   },
   "devDependencies": {
-    "@pptb/types": "^1.0.1",
+    "@pptb/types": "^1.2.0",
     "@types/js-beautify": "^1.14.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

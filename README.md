@@ -1,95 +1,61 @@
-# FlowFinder
+# Web Resource Manager
 
-A Power Platform Tool Box tool
+A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, editing, and publishing Dataverse web resources.
 
 ## Features
 
-- ✅ React 18 with TypeScript
-- ✅ Vite for fast development and building
-- ✅ Access to ToolBox API via `window.toolboxAPI`
-- ✅ Connection URL and access token handling
-- ✅ Event subscription and handling
-- ✅ Hot Module Replacement (HMR) for development
+### Solution Browser
 
-## Structure
+- Select from available unmanaged solutions
+- Hierarchical tree view of web resources organised by folder path
+- Resizable side panel (220–600px) with expand/collapse toggle
+- Full-text search across resource names and paths (with 300ms debounce)
 
-```
-pptb-flowfinder/
-├── src/
-│   ├── App.tsx         # Main component
-│   ├── main.tsx        # Entry point
-│   └── styles.css      # Styling
-├── dist/               # Build output
-├── index.html
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
+### Multi-Tab Editor
 
-## Installation
+- Open multiple resources in tabs simultaneously
+- Tab overflow menu when space is limited — active tab is always visible
+- Closing a tab auto-switches to the nearest remaining tab
+- Close button positioned on the right side of each tab
 
-Install dependencies:
+### Format-Specific Viewers
 
-```bash
-npm install
-```
+| Type  | Formats                         | Viewer        | Capabilities                                                                                                                                   |
+| ----- | ------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code  | HTML, CSS, JavaScript, XML, XSL | Ace Editor    | Syntax highlighting, line numbers, light/dark theme                                                                                            |
+| Image | PNG, JPEG, GIF                  | Image preview | Zoom (25–400%), copy base64 to clipboard                                                                                                       |
+| SVG   | SVG                             | Inline render | Zoom (25–800%), copy source to clipboard                                                                                                       |
+| RESX  | RESX                            | Data grid     | Editable Name/Value columns, read-only Comment column (text selectable for copying), add & delete rows, sortable, resizable & wrapping columns |
 
-## Development
+### Resource Actions
 
-Start development server with HMR:
+- **Save** — save content to Dataverse without publishing
+- **Save & Publish** — save and publish in a single action
+- **Upload** — replace resource content from a local file (validates file extension)
+- **Download** — export resource to a local file with correct extension and MIME type
+- **Prettify** — format HTML, CSS, or JavaScript 
+- **Minify** — minify HTML or JavaScript 
+- **Edit Resources** - Modify resource files
+- **Refresh** — reload the resource content from Dataverse, discarding any unsaved local changes
 
-```bash
-npm run dev
-```
+All editing actions are disabled for non-customizable (managed layer) resources.
 
-Build the tool:
+### Context Menu (Tree View)
 
-```bash
-npm run build
-```
+Right-click any item in the tree to access contextual actions:
 
-Preview production build:
+- **New Resource** — create a new web resource under the selected folder
+- **New Subfolder / New Root Folder** — add a virtual folder to organise resources
+- **Rename** — rename a resource or folder (including bulk-rename of all resources within)
+- **Refresh** — reload the selected resource's content from Dataverse
 
-```bash
-npm run preview
-```
+### Filtering
 
-## Usage in ToolBox
-
-1. Build the tool using `npm run build`
-2. Install the tool in ToolBox
-3. Load and use the tool from the ToolBox interface
-
-## API Usage
-
-The tool demonstrates various ToolBox API features:
-
-### Getting Connection Context
-
-```typescript
-const context = await window.toolboxAPI.getToolContext();
-console.log(context.connectionUrl);
-console.log(context.accessToken);
-```
-
-### Showing Notifications
-
-```typescript
-await window.toolboxAPI.showNotification({
-  title: 'Success',
-  body: 'Operation completed',
-  type: 'success'
-});
-```
-
-### Subscribing to Events
-
-```typescript
-window.toolboxAPI.onToolboxEvent((event, payload) => {
-  console.log('Event:', payload.event);
-  console.log('Data:', payload.data);
-});
-```
+- **Resource types** — toggle individual types on/off (HTML, CSS, JS, XML, PNG, JPG, GIF, XSL, SVG, RESX)
+- **Managed resources** — include or exclude managed resources
+- **Hidden resources** — include or exclude hidden resources
+- **Prefix exclusion** — comma-separated prefixes to exclude (default: `msdyn_`, `adx_`, `cc_MscrmControls`)
+- Active filter summary displayed in the toolbar (e.g. _All · Not Mgd · Not Hdn_)
 
 ## License
 

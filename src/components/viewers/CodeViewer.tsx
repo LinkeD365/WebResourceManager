@@ -71,13 +71,18 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {!resource.isCustomizable && (
+        <div style={{ padding: "6px 12px", fontSize: "12px", fontStyle: "italic", color: "#888" }}>
+          This file is not customisable
+        </div>
+      )}
       <AceEditor
         mode={mode}
         theme={theme}
         value={displayContent || ""}
         onChange={handleEditorChange}
-        readOnly={!resource.isCustomizable}
+        readOnly={!resource.isCustomizable || resource.isSaving}
         onLoad={(editor) => {
           editorRef.current = editor;
         }}

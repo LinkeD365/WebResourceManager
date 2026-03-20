@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { ViewModel } from "../model/viewModel";
 import { dvService } from "../services/dataverseService";
@@ -14,6 +14,7 @@ import {
   MenuPopover,
   MenuList,
   MenuItem,
+  Spinner,
   makeStyles,
   useIsOverflowItemVisible,
   useOverflowMenu,
@@ -22,11 +23,13 @@ import {
   ChevronLeft24Regular,
   ChevronRight24Regular,
   Dismiss16Regular,
+  Eye16Regular,
   MoreHorizontalRegular,
 } from "@fluentui/react-icons";
 import { CodeViewer } from "./viewers/CodeViewer";
 import { SvgViewer } from "./viewers/SvgViewer";
 import { ImageViewer } from "./viewers/ImageViewer";
+import { ResxViewer } from "./viewers/ResxViewer";
 
 interface WebResourceDetailsProps {
   vm: ViewModel;
@@ -59,6 +62,19 @@ const useOverflowMenuStyles = makeStyles({
   },
 });
 
+const useTabIndicatorStyles = makeStyles({
+  dirty: {
+    "&[aria-selected='true']::after": {
+      backgroundColor: "#e74c3c",
+    },
+  },
+  saved: {
+    "&[aria-selected='true']::after": {
+      backgroundColor: "#9b59b6",
+    },
+  },
+});
+
 interface OverflowMenuItemProps {
   tabId: string;
   tabName: string;
@@ -84,7 +100,7 @@ const OverflowMenuItem = React.forwardRef<HTMLButtonElement, OverflowMenuItemPro
 OverflowMenuItem.displayName = "OverflowMenuItem";
 
 interface OverflowMenuProps {
-  tabs: Array<{ id: string; name: string; displayName?: string }>;
+  tabs: Array<{ id: string; name: string; fileName: string }>;
   onTabSelect: (tabId: string) => void;
 }
 
@@ -111,12 +127,7 @@ const OverflowMenuTrigger = ({ tabs, onTabSelect }: OverflowMenuProps) => {
       <MenuPopover className={styles.menuPopover}>
         <MenuList className={styles.menu}>
           {tabs.map((tab) => (
-            <OverflowMenuItem
-              key={tab.id}
-              tabId={tab.id}
-              tabName={tab.displayName || tab.name}
-              onTabSelect={onTabSelect}
-            />
+            <OverflowMenuItem key={tab.id} tabId={tab.id} tabName={tab.fileName} onTabSelect={onTabSelect} />
           ))}
         </MenuList>
       </MenuPopover>
@@ -126,10 +137,12 @@ const OverflowMenuTrigger = ({ tabs, onTabSelect }: OverflowMenuProps) => {
 
 export const WebResourceDetails = observer(
   ({ vm, dvSvc, onLog, drawerOpen, onToggleDrawer }: WebResourceDetailsProps): React.JSX.Element => {
+    const refreshTrigger = vm.selectedResource?.refreshTrigger ?? 0;
+
     useEffect(() => {
       let isActive = true;
       const resource = vm.selectedResource;
-      if (!resource || resource.stringContent) return;
+      if (!resource || resource.stringContent !== null) return;
 
       const loadContent = async () => {
         try {
@@ -149,7 +162,7 @@ export const WebResourceDetails = observer(
       return () => {
         isActive = false;
       };
-    }, [dvSvc, onLog, vm.selectedResource]);
+    }, [dvSvc, onLog, vm.selectedResource, refreshTrigger]);
 
     const handleTabSelect = (_: any, data: { value: unknown }) => {
       vm.setActiveTab(data.value as string);
@@ -157,12 +170,26 @@ export const WebResourceDetails = observer(
 
     const handleCloseTab = (e: React.MouseEvent, resourceId: string) => {
       e.stopPropagation();
+      const tab = vm.openTabs.find((t) => t.id === resourceId);
+      if (tab && (tab.isDirty || tab.isSavedNotPublished)) {
+        setCloseConfirm({
+          resourceId,
+          message: tab.isDirty
+            ? "This resource has unsaved changes. Close anyway?"
+            : "This resource has been saved but not published. Close anyway?",
+        });
+        return;
+      }
       vm.closeTab(resourceId);
     };
+
+    const [closeConfirm, setCloseConfirm] = useState<{ resourceId: string; message: string } | null>(null);
 
     const handleOverflowMenuSelect = (tabId: string) => {
       vm.setActiveTab(tabId);
     };
+
+    const tabIndicatorStyles = useTabIndicatorStyles();
 
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -190,17 +217,55 @@ export const WebResourceDetails = observer(
                     <OverflowItem key={tab.id} id={tab.id} priority={tab.id === vm.activeTabId ? 2 : 1}>
                       <Tab
                         value={tab.id}
-                        icon={
-                          <Button
-                            appearance="subtle"
-                            size="small"
-                            icon={<Dismiss16Regular />}
-                            onClick={(e) => handleCloseTab(e, tab.id)}
-                            style={{ minWidth: "20px", padding: "2px" }}
-                          />
+                        className={
+                          tab.isDirty
+                            ? tabIndicatorStyles.dirty
+                            : tab.isSavedNotPublished
+                              ? tabIndicatorStyles.saved
+                              : undefined
                         }
                       >
-                        {tab.displayName || tab.name}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          {!tab.isCustomizable && (
+                            <Eye16Regular style={{ color: tokens.colorNeutralForeground3, flexShrink: 0 }} />
+                          )}
+                          {tab.fileName}
+                          {tab.isSaving ? (
+                            <Spinner size="extra-tiny" />
+                          ) : (
+                            <>
+                              {tab.isDirty && (
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: "#e74c3c",
+                                    display: "inline-block",
+                                  }}
+                                />
+                              )}
+                              {!tab.isDirty && tab.isSavedNotPublished && (
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: "#9b59b6",
+                                    display: "inline-block",
+                                  }}
+                                />
+                              )}
+                            </>
+                          )}
+                        </span>
+                        <Button
+                          appearance="subtle"
+                          size="small"
+                          icon={<Dismiss16Regular />}
+                          onClick={(e) => handleCloseTab(e, tab.id)}
+                          style={{ minWidth: "20px", padding: "2px" }}
+                        />
                       </Tab>
                     </OverflowItem>
                   ))}
@@ -211,12 +276,64 @@ export const WebResourceDetails = observer(
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px", position: "relative" }}>
+          {closeConfirm && (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 16px",
+                  backgroundColor: tokens.colorPaletteYellowBackground2,
+                  borderBottom: `1px solid ${tokens.colorPaletteYellowBorder1}`,
+                  gap: "12px",
+                }}
+              >
+                <span style={{ fontSize: "13px" }}>{closeConfirm.message}</span>
+                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                  <Button
+                    size="small"
+                    appearance="primary"
+                    onClick={() => {
+                      const tab = vm.openTabs.find((t) => t.id === closeConfirm.resourceId);
+                      if (tab) {
+                        tab.stringContent = tab.originalContent;
+                        tab.isSavedNotPublished = false;
+                      }
+                      vm.closeTab(closeConfirm.resourceId);
+                      setCloseConfirm(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                  <Button size="small" appearance="secondary" onClick={() => setCloseConfirm(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(0, 0, 0, 0.15)",
+                  zIndex: 9,
+                  pointerEvents: "all",
+                }}
+              />
+            </>
+          )}
           {vm.selectedResource ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "100%" }}>
               {vm.selectedResource.stringContent !== null &&
                 (() => {
                   const type = vm.selectedResource.type;
+                  if (type === 12) return <ResxViewer resource={vm.selectedResource} vm={vm} />;
                   if (type === 11) return <SvgViewer resource={vm.selectedResource} />;
                   if ([5, 6, 7].includes(type)) return <ImageViewer resource={vm.selectedResource} />;
                   return <CodeViewer resource={vm.selectedResource} />;

@@ -44,6 +44,7 @@ export class dvService {
     typeFilters: number[],
     prefixes: string[] = [],
     loadManaged: boolean = false,
+    showHidden: boolean = false,
     pagingCookie?: string,
   ): Promise<WebResourcesResult> {
     this.onLog("Fetching web resources...", "info");
@@ -102,6 +103,10 @@ export class dvService {
         ? "    <filter>\n      <condition attribute='ismanaged' operator='eq' value='0'/>\n    </filter>"
         : "";
 
+      const hiddenFilterXml = !showHidden
+        ? "    <filter>\n      <condition attribute='ishidden' operator='eq' value='0'/>\n    </filter>"
+        : "";
+
       const fetchXml = [
         `<fetch page='${pageNumber}' count='500'`,
         decodedPagingCookie ? ` paging-cookie='${decodedPagingCookie}'` : "",
@@ -115,6 +120,7 @@ export class dvService {
         typeFilterXml,
         prefixFilterXml,
         managedFilterXml,
+        hiddenFilterXml,
         "    <link-entity name='solutioncomponent' from='objectid' to='webresourceid' link-type='inner' alias='sc'>",
         "      <filter>",
         "        <condition attribute='solutionid' operator='eq' value='",
@@ -204,6 +210,23 @@ export class dvService {
     }
   }
 
+  async renameWebResource(webResourceId: string, newName: string, newDisplayName: string): Promise<void> {
+    if (!this.connection) {
+      throw new Error("No connection available");
+    }
+
+    try {
+      await this.dvApi.update("webresource", webResourceId, {
+        name: newName,
+        displayname: newDisplayName,
+      });
+      this.onLog("Web resource renamed successfully", "success");
+    } catch (err) {
+      this.onLog(`Error renaming web resource: ${err}`, "error");
+      throw err;
+    }
+  }
+
   async publishWebResource(webResourceId: string): Promise<void> {
     this.onLog("Publishing web resource...", "info");
     if (!this.connection) {
@@ -220,6 +243,45 @@ export class dvService {
       this.onLog("Web resource published successfully", "success");
     } catch (err) {
       this.onLog(`Error publishing web resource: ${err}`, "error");
+      throw err;
+    }
+  }
+
+  async createWebResource(
+    name: string,
+    displayName: string,
+    type: number,
+    solutionUniqueName: string,
+  ): Promise<string> {
+    if (!this.connection) {
+      throw new Error("No connection available");
+    }
+
+    try {
+      const result = await this.dvApi.create("webresource", {
+        name,
+        displayname: displayName,
+        webresourcetype: type,
+        content: btoa(" "),
+      });
+      const id = (result as any)?.id ?? result;
+
+      // Add the new resource to the solution
+      await this.dvApi.execute({
+        operationName: "AddSolutionComponent",
+        operationType: "action",
+        parameters: {
+          ComponentId: id,
+          ComponentType: 61, // Web Resource
+          SolutionUniqueName: solutionUniqueName,
+          AddRequiredComponents: false,
+        },
+      });
+
+      this.onLog(`Created web resource: ${name}`, "success");
+      return id;
+    } catch (err) {
+      this.onLog(`Error creating web resource: ${err}`, "error");
       throw err;
     }
   }
