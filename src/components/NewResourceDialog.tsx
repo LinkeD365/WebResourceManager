@@ -27,6 +27,7 @@ const resourceTypeOptions = [
   { type: 7, label: "GIF" },
   { type: 9, label: "XSL" },
   { type: 11, label: "SVG" },
+  { type: 12, label: "RESX" },
 ];
 
 const extensionForType: Record<number, string> = {
@@ -39,6 +40,7 @@ const extensionForType: Record<number, string> = {
   7: ".gif",
   9: ".xsl",
   11: ".svg",
+  12: ".resx",
 };
 
 interface NewResourceDialogProps {

@@ -25,7 +25,7 @@ A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, 
 | Code  | HTML, CSS, JavaScript, XML, XSL | Ace Editor    | Syntax highlighting, line numbers, light/dark theme                                                                                            |
 | Image | PNG, JPEG, GIF                  | Image preview | Zoom (25–400%), copy base64 to clipboard                                                                                                       |
 | SVG   | SVG                             | Inline render | Zoom (25–800%), copy source to clipboard                                                                                                       |
-| RESX  | RESX                            | Data grid     | Editable Name/Value columns, read-only Comment column (text selectable for copying), add & delete rows, sortable, resizable & wrapping columns |
+| RESX  | RESX                            | Data grid     | Editable Name/Value columns, read-only Comment column (text selectable for copying), add rows, sortable, resizable & wrapping columns         |
 
 ### Resource Actions
 

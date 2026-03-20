@@ -63,13 +63,23 @@ export const ResourceTypeFilter: React.FC<ResourceTypeFilterProps> = observer(({
   const managedLabel = current.loadManaged ? "Inc Mgd" : "Not Mgd";
   const hiddenLabel = current.showHidden ? "Inc Hdn" : "Not Hdn";
 
-  const updateDraft = useCallback((updater: (prev: DraftState) => DraftState) => {
-    setDraft((prev) => {
-      const next = updater(prev!);
-      draftRef.current = next;
-      return next;
-    });
-  }, []);
+  const updateDraft = useCallback(
+    (updater: (prev: DraftState) => DraftState) => {
+      setDraft((prev) => {
+        const base: DraftState =
+          prev ?? {
+            types: new Set(vm.resourceTypeFilter),
+            loadManaged: vm.loadManaged,
+            showHidden: vm.showHidden,
+            prefixFilter: vm.prefixFilter,
+          };
+        const next = updater(base);
+        draftRef.current = next;
+        return next;
+      });
+    },
+    [vm],
+  );
 
   const handleOpenChange = useCallback(
     (_: any, data: { open: boolean }) => {
