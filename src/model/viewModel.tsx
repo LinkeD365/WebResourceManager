@@ -73,8 +73,7 @@ export class WebResource {
   rename(newName: string) {
     this.name = newName;
     this.displayName = newName;
-    const parts = newName.split("/");
-    this.path = parts.slice(1).join("/") || newName;
+    this.path = newName;
   }
 }
 

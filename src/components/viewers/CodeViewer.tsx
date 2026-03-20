@@ -74,7 +74,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       {!resource.isCustomizable && (
         <div style={{ padding: "6px 12px", fontSize: "12px", fontStyle: "italic", color: "#888" }}>
-          This file is not customisable
+          This file is not customizable
         </div>
       )}
       <AceEditor

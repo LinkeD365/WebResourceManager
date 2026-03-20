@@ -78,13 +78,21 @@ interface ResxViewerProps {
 
 export const ResxViewer: React.FC<ResxViewerProps> = observer(({ resource, vm }) => {
   const [entries, setEntries] = useState<ResxEntry[]>(() =>
-    resource.stringContent ? parseResx(resource.stringContent) : [],
+    resource.stringContent != null ? parseResx(resource.stringContent) : [],
   );
 
   const isReadOnly = !resource.isCustomizable || resource.isSaving;
   const lastTriggerRef = useRef(vm.resxAddRowTrigger);
   const gridRef = useRef<AgGridReact>(null);
   const newRowIdRef = useRef<number | null>(null);
+
+  // Reset entries when switching to a different resource (intentionally only depends on resource.id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setEntries(resource.stringContent != null ? parseResx(resource.stringContent) : []);
+    lastTriggerRef.current = vm.resxAddRowTrigger;
+    newRowIdRef.current = null;
+  }, [resource.id]);
 
   useEffect(() => {
     if (vm.resxAddRowTrigger > lastTriggerRef.current) {
@@ -93,7 +101,7 @@ export const ResxViewer: React.FC<ResxViewerProps> = observer(({ resource, vm })
       newRowIdRef.current = newId;
       setEntries((prev) => {
         const updated = [...prev, { _id: newId, key: "", value: "", comment: "", isNew: true }];
-        if (resource.stringContent) {
+        if (resource.stringContent != null) {
           resource.stringContent = serializeResx(updated, resource.originalContent || resource.stringContent);
         }
         return updated;
@@ -115,7 +123,7 @@ export const ResxViewer: React.FC<ResxViewerProps> = observer(({ resource, vm })
 
   const handleCellValueChanged = useCallback(() => {
     // AG Grid already mutated the row data in-place; just serialize to XML
-    if (resource.stringContent) {
+    if (resource.stringContent != null) {
       resource.stringContent = serializeResx(entries, resource.originalContent || resource.stringContent);
     }
   }, [entries, resource]);
@@ -161,7 +169,7 @@ export const ResxViewer: React.FC<ResxViewerProps> = observer(({ resource, vm })
     [],
   );
 
-  if (!resource.stringContent) {
+  if (resource.stringContent == null) {
     return <p>No content available</p>;
   }
 

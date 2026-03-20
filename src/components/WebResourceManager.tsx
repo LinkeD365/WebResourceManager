@@ -219,7 +219,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   };
 
   const handleSave = async () => {
-    if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
+    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
     const resource = vm.selectedResource;
     resource.isSaving = true;
     try {
@@ -246,7 +246,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   };
 
   const handleSaveAndPublish = async () => {
-    if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
+    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
     const resource = vm.selectedResource;
     resource.isSaving = true;
     try {
@@ -387,7 +387,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                 <>
                   <ToolbarDivider />
                   <ToolbarButton
-                    disabled={!isCustomizable}
+                    disabled={!isCustomizable || isSaving}
                     onClick={() => vm.triggerResxAddRow()}
                     aria-label="Add Row"
                     icon={<AddRegular />}

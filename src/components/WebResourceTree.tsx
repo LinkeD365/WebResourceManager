@@ -232,12 +232,24 @@ export const WebResourceTree = observer((props: WebResourceTreeProps): React.JSX
 
     // Find all resources under this folder
     const affected = vm.webResources.filter((wr) => wr.name === renamingFolder || wr.name.startsWith(oldPrefix));
+
+    // Stage the rename plan so local state is only mutated after all remote calls succeed
+    const renamePlan = affected.map((wr) => ({
+      wr,
+      newName: wr.name === renamingFolder ? newFolderPath : newPrefix + wr.name.slice(oldPrefix.length),
+    }));
+
     try {
-      for (const wr of affected) {
-        const newName = wr.name === renamingFolder ? newFolderPath : newPrefix + wr.name.slice(oldPrefix.length);
+      // Perform all remote renames first
+      for (const { wr, newName } of renamePlan) {
         await dvSvc.renameWebResource(wr.id, newName, newName);
+      }
+
+      // Only update local WebResource state after all remote calls succeed
+      for (const { wr, newName } of renamePlan) {
         wr.rename(newName);
       }
+
       // Update virtual folders too
       const vfToAdd: string[] = [];
       vm.virtualFolders.forEach((vf) => {

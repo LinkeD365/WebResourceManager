@@ -26,7 +26,7 @@ When updating the code viewer:
 
 When adding buttons
 
-- Primary buttons shoudl be on the left, secondary right. E.g. Save is left, cancel is right. This is the fluent approach and is also consistent with the existing codebase.
+- Primary buttons should be on the left, secondary right. E.g. Save is left, cancel is right. This is the fluent approach and is also consistent with the existing codebase.
 
 ## When modifying components:
 
