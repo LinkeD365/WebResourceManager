@@ -24,6 +24,10 @@ When updating the code viewer:
 - Remember: js-beautify is now the formatter (not Prettier)
 - Test theme switching with data-theme attribute
 
+When adding buttons
+
+- Primary buttons should be on the left, secondary right. E.g. Save is left, cancel is right. This is the fluent approach and is also consistent with the existing codebase.
+
 ## When modifying components:
 
 - Keep components focused and single-responsibility

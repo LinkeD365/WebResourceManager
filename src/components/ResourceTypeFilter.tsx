@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import {
   Button,
@@ -32,43 +32,113 @@ const typeFilters: TypeFilterSettings[] = [
   { type: 12, label: "RESX", description: "RESX resource files" },
 ];
 
+interface DraftState {
+  types: Set<number>;
+  loadManaged: boolean;
+  showHidden: boolean;
+  prefixFilter: string;
+}
+
 interface ResourceTypeFilterProps {
   vm: ViewModel;
 }
 
 export const ResourceTypeFilter: React.FC<ResourceTypeFilterProps> = observer(({ vm }) => {
-  const selectedCount = typeFilters.filter((f) => vm.isTypeFilteredIn(f.type)).length;
+  const [draft, setDraft] = useState<DraftState | null>(null);
+  const draftRef = useRef<DraftState | null>(null);
+
+  const current = draft ?? {
+    types: vm.resourceTypeFilter,
+    loadManaged: vm.loadManaged,
+    showHidden: vm.showHidden,
+    prefixFilter: vm.prefixFilter,
+  };
+
+  const isTypeChecked = (type: number) => current.types.has(type);
+  const selectedCount = typeFilters.filter((f) => isTypeChecked(f.type)).length;
   const isAllSelected = selectedCount === typeFilters.length;
   const isMixed = selectedCount > 0 && selectedCount < typeFilters.length;
-  const selectedLabels = typeFilters.filter((f) => vm.isTypeFilteredIn(f.type)).map((f) => f.label);
+  const selectedLabels = typeFilters.filter((f) => isTypeChecked(f.type)).map((f) => f.label);
   const filterSummary = isAllSelected ? "All" : selectedLabels.length > 0 ? selectedLabels.join(", ") : "None";
+  const managedLabel = current.loadManaged ? "Inc Mgd" : "Not Mgd";
+  const hiddenLabel = current.showHidden ? "Inc Hdn" : "Not Hdn";
+
+  const updateDraft = useCallback(
+    (updater: (prev: DraftState) => DraftState) => {
+      setDraft((prev) => {
+        const base: DraftState =
+          prev ?? {
+            types: new Set(vm.resourceTypeFilter),
+            loadManaged: vm.loadManaged,
+            showHidden: vm.showHidden,
+            prefixFilter: vm.prefixFilter,
+          };
+        const next = updater(base);
+        draftRef.current = next;
+        return next;
+      });
+    },
+    [vm],
+  );
+
+  const handleOpenChange = useCallback(
+    (_: any, data: { open: boolean }) => {
+      if (data.open) {
+        const initial: DraftState = {
+          types: new Set(vm.resourceTypeFilter),
+          loadManaged: vm.loadManaged,
+          showHidden: vm.showHidden,
+          prefixFilter: vm.prefixFilter,
+        };
+        draftRef.current = initial;
+        setDraft(initial);
+      } else {
+        const d = draftRef.current;
+        if (d) {
+          // Apply type filter changes
+          typeFilters.forEach((f) => {
+            const inVm = vm.isTypeFilteredIn(f.type);
+            const inDraft = d.types.has(f.type);
+            if (inVm !== inDraft) vm.toggleTypeFilter(f.type);
+          });
+          vm.setLoadManaged(d.loadManaged);
+          vm.setShowHidden(d.showHidden);
+          vm.setPrefixFilter(d.prefixFilter);
+          vm.buildWebResourceTree();
+        }
+        draftRef.current = null;
+        setDraft(null);
+      }
+    },
+    [vm],
+  );
 
   const handleToggleAll = (nextChecked: boolean) => {
-    if (!nextChecked) {
+    updateDraft((prev) => {
+      const types = new Set(prev.types);
       typeFilters.forEach((f) => {
-        if (vm.isTypeFilteredIn(f.type)) {
-          vm.toggleTypeFilter(f.type);
-        }
+        if (nextChecked) types.add(f.type);
+        else types.delete(f.type);
       });
-    } else {
-      typeFilters.forEach((f) => {
-        if (!vm.isTypeFilteredIn(f.type)) {
-          vm.toggleTypeFilter(f.type);
-        }
-      });
-    }
-    vm.buildWebResourceTree();
+      return { ...prev, types };
+    });
   };
 
   const handleTypeToggle = (type: number) => {
-    vm.toggleTypeFilter(type);
-    vm.buildWebResourceTree();
+    updateDraft((prev) => {
+      const types = new Set(prev.types);
+      if (types.has(type)) types.delete(type);
+      else types.add(type);
+      return { ...prev, types };
+    });
   };
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalSNudge }}>
-      <span style={{ fontSize: "9px", color: tokens.colorNeutralForeground3 }}>{filterSummary}</span>
-      <Popover inline positioning="below-end">
+      <span style={{ fontSize: "9px", color: tokens.colorNeutralForeground3 }}>
+        {filterSummary} · {managedLabel} · {hiddenLabel}
+      </span>
+      <Popover inline positioning="below-end" onOpenChange={handleOpenChange}>
         <PopoverTrigger disableButtonEnhancement>
           <Button appearance="subtle" icon={<Settings24Regular />} aria-label="Settings" />
         </PopoverTrigger>
@@ -98,13 +168,12 @@ export const ResourceTypeFilter: React.FC<ResourceTypeFilterProps> = observer(({
                 onChange={(_, data) => handleToggleAll(!!data.checked)}
                 label="All"
                 style={{ fontWeight: 600 }}
-                
               />
             </div>
             {typeFilters.map((filter) => (
               <Checkbox
                 key={filter.type}
-                checked={vm.isTypeFilteredIn(filter.type)}
+                checked={isTypeChecked(filter.type)}
                 onChange={() => handleTypeToggle(filter.type)}
                 label={filter.label}
               />
@@ -119,16 +188,21 @@ export const ResourceTypeFilter: React.FC<ResourceTypeFilterProps> = observer(({
               }}
             >
               <Checkbox
-                checked={vm.loadManaged}
-                onChange={(_, data) => vm.setLoadManaged(!!data.checked)}
+                checked={current.loadManaged}
+                onChange={(_, data) => updateDraft((prev) => ({ ...prev, loadManaged: !!data.checked }))}
                 label="Load Managed"
+              />
+              <Checkbox
+                checked={current.showHidden}
+                onChange={(_, data) => updateDraft((prev) => ({ ...prev, showHidden: !!data.checked }))}
+                label="Show Hidden"
               />
               <Label size="small">Exclude prefixes (comma-separated)</Label>
               <Input
                 size="small"
                 placeholder="e.g. contoso_, fabrikam_"
-                value={vm.prefixFilter}
-                onChange={(_, data) => vm.setPrefixFilter(data.value)}
+                value={current.prefixFilter}
+                onChange={(_, data) => updateDraft((prev) => ({ ...prev, prefixFilter: data.value }))}
               />
             </div>
           </div>

@@ -24,6 +24,9 @@ export class WebResource {
   isCustomizable: boolean;
   stringContent: string | null = null;
   originalContent: string | null = null;
+  isSavedNotPublished: boolean = false;
+  isSaving: boolean = false;
+  refreshTrigger: number = 0;
 
   constructor(
     id: string,
@@ -46,8 +49,31 @@ export class WebResource {
     return this.originalContent !== null && this.stringContent !== this.originalContent;
   }
 
+  get fileName(): string {
+    const parts = this.name.split("/");
+    return parts[parts.length - 1];
+  }
+
   markClean() {
     this.originalContent = this.stringContent;
+    this.isSavedNotPublished = true;
+  }
+
+  markPublished() {
+    this.isSavedNotPublished = false;
+  }
+
+  triggerRefresh() {
+    this.stringContent = null;
+    this.originalContent = null;
+    this.isSavedNotPublished = false;
+    this.refreshTrigger++;
+  }
+
+  rename(newName: string) {
+    this.name = newName;
+    this.displayName = newName;
+    this.path = newName;
   }
 }
 
@@ -70,9 +96,13 @@ export class ViewModel {
   resourceTypeFilter: Set<number> = new Set([1, 2, 3, 4, 5, 6, 7, 9, 11, 12]); // All types by default
   searchFilter: string = "";
   prefixFilter: string = "msdyn_,adx_,cc_MscrmControls";
-  loadManaged: boolean = false;
+  loadManaged: boolean = true;
+  showHidden: boolean = false;
+  resxAddRowTrigger: number = 0;
+  resxSearchFilter: string = "";
   openTabs: WebResource[] = [];
   activeTabId: string | null = null;
+  virtualFolders: Set<string> = new Set();
 
   constructor() {
     makeAutoObservable(this);
@@ -133,6 +163,35 @@ export class ViewModel {
       });
     });
 
+    // Ensure virtual folders exist in the tree
+    this.virtualFolders.forEach((folderPath) => {
+      const pathParts = folderPath.split("/");
+      let currentPath = "";
+      let currentLevel = root;
+
+      pathParts.forEach((part) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+        if (!currentLevel.has(part)) {
+          const newNode: TreeNode = {
+            value: currentPath,
+            label: part,
+            children: [],
+          };
+          currentLevel.set(part, newNode);
+        }
+
+        const node = currentLevel.get(part)!;
+        if (!node.children) {
+          node.children = [];
+        }
+        if (!(node as any).childrenMap) {
+          (node as any).childrenMap = new Map<string, TreeNode>();
+        }
+        currentLevel = (node as any).childrenMap;
+      });
+    });
+
     // Convert root map to array and populate children arrays
     const populateChildren = (parentMap: Map<string, TreeNode>): TreeNode[] => {
       const nodes: TreeNode[] = [];
@@ -142,6 +201,13 @@ export class ViewModel {
           delete (node as any).childrenMap;
         }
         nodes.push(node);
+      });
+      // Sort: folders first, then files, both alphabetically
+      nodes.sort((a, b) => {
+        const aIsFolder = !a.isLeaf;
+        const bIsFolder = !b.isLeaf;
+        if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
+        return a.label.localeCompare(b.label);
       });
       return nodes;
     };
@@ -227,6 +293,29 @@ export class ViewModel {
 
   setLoadManaged(value: boolean) {
     this.loadManaged = value;
+  }
+
+  setShowHidden(value: boolean) {
+    this.showHidden = value;
+  }
+
+  triggerResxAddRow() {
+    this.resxAddRowTrigger++;
+  }
+
+  setResxSearchFilter(value: string) {
+    this.resxSearchFilter = value;
+  }
+
+  addWebResource(resource: WebResource) {
+    this.webResources.push(resource);
+    this.buildWebResourceTree();
+    this.openTab(resource);
+  }
+
+  addVirtualFolder(path: string) {
+    this.virtualFolders.add(path);
+    this.buildWebResourceTree();
   }
 
   getPrefixes(): string[] {

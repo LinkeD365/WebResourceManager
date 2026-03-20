@@ -27,6 +27,8 @@ import {
   CloudArrowUpRegular,
   ArrowUploadRegular,
   ArrowDownloadRegular,
+  AddRegular,
+  ArrowClockwiseRegular,
 } from "@fluentui/react-icons";
 import { minify } from "terser";
 
@@ -108,12 +110,15 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   const isCodeViewerResource = selectedType !== null && [1, 2, 3, 4, 9].includes(selectedType);
   const isImageResource = selectedType !== null && [5, 6, 7].includes(selectedType);
   const isSvgResource = selectedType === 11;
-  const canTransferFile = isCodeViewerResource || isImageResource || isSvgResource;
+  const isResxResource = selectedType === 12;
+  const canTransferFile = isCodeViewerResource || isImageResource || isSvgResource || isResxResource;
   const isCustomizable = vm.selectedResource?.isCustomizable ?? false;
-  const canSaveResource = (isCodeViewerResource || isImageResource || isSvgResource) && isCustomizable;
-  const canSave = (vm.selectedResource?.isDirty ?? false) && isCustomizable;
-  const canPrettify = selectedType !== null && [1, 2, 3].includes(selectedType);
-  const canMinify = selectedType !== null && [1, 3].includes(selectedType);
+  const canSaveResource =
+    (isCodeViewerResource || isImageResource || isSvgResource || isResxResource) && isCustomizable;
+  const isSaving = vm.selectedResource?.isSaving ?? false;
+  const canSave = (vm.selectedResource?.isDirty ?? false) && isCustomizable && !isSaving;
+  const canPrettify = selectedType !== null && [1, 2, 3].includes(selectedType) && !isSaving;
+  const canMinify = selectedType !== null && [1, 3].includes(selectedType) && !isSaving;
 
   const handlePrettify = () => {
     if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
@@ -154,6 +159,10 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
 
     if (type === 11) {
       return { extension: "svg", mimeType: "image/svg+xml", label: "SVG", acceptedExtensions: ["svg"] };
+    }
+
+    if (type === 12) {
+      return { extension: "resx", mimeType: "application/xml", label: "RESX", acceptedExtensions: ["resx"] };
     }
 
     const codeConfigMap: {
@@ -210,16 +219,18 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   };
 
   const handleSave = async () => {
-    if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
+    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
+    const resource = vm.selectedResource;
+    resource.isSaving = true;
     try {
       const resourceLabel = isImageResource ? "image" : "web resource";
       onLog(`Saving ${resourceLabel}...`, "info");
-      await dvSvc.saveWebResourceContent(vm.selectedResource.id, vm.selectedResource.stringContent);
-      vm.selectedResource.markClean();
-      onLog(`Saved ${vm.selectedResource.name}`, "success");
+      await dvSvc.saveWebResourceContent(resource.id, resource.stringContent!);
+      resource.markClean();
+      onLog(`Saved ${resource.name}`, "success");
       await window.toolboxAPI.utils.showNotification({
         title: "Save Successful",
-        body: `Saved ${vm.selectedResource.name}`,
+        body: `Saved ${resource.name}`,
         type: "success",
       });
     } catch (err) {
@@ -229,21 +240,30 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
         body: `Failed to save: ${err}`,
         type: "error",
       });
+    } finally {
+      resource.isSaving = false;
     }
   };
 
   const handleSaveAndPublish = async () => {
-    if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
+    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
+    const resource = vm.selectedResource;
+    resource.isSaving = true;
     try {
       const resourceLabel = isImageResource ? "image" : "web resource";
-      onLog(`Saving and publishing ${resourceLabel}...`, "info");
-      await dvSvc.saveWebResourceContent(vm.selectedResource.id, vm.selectedResource.stringContent);
-      vm.selectedResource.markClean();
-      await dvSvc.publishWebResource(vm.selectedResource.id);
-      onLog(`Saved and published ${vm.selectedResource.name}`, "success");
+      if (resource.isDirty) {
+        onLog(`Saving and publishing ${resourceLabel}...`, "info");
+        await dvSvc.saveWebResourceContent(resource.id, resource.stringContent!);
+        resource.markClean();
+      } else {
+        onLog(`Publishing ${resourceLabel}...`, "info");
+      }
+      await dvSvc.publishWebResource(resource.id);
+      resource.markPublished();
+      onLog(`Saved and published ${resource.name}`, "success");
       await window.toolboxAPI.utils.showNotification({
         title: "Saved and Published",
-        body: `Saved and published ${vm.selectedResource.name}`,
+        body: `Saved and published ${resource.name}`,
         type: "success",
       });
     } catch (err) {
@@ -253,6 +273,8 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
         body: `Failed to save and publish: ${err}`,
         type: "error",
       });
+    } finally {
+      resource.isSaving = false;
     }
   };
 
@@ -295,6 +317,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
               value={vm.selectedSolution?.name ?? ""}
               disabled={vm.solutions.length === 0}
               inlinePopup
+              style={{ minWidth: `${drawerWidth - 16}px` }}
             >
               {vm.solutions.map((solution: SolutionMeta) => (
                 <Option key={solution.id} value={solution.id} text={solution.name}>
@@ -304,6 +327,16 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
             </Dropdown>
           )}
 
+          {vm.selectedResource && (
+            <>
+              <ToolbarDivider />
+              <ToolbarButton
+                onClick={() => vm.selectedResource?.triggerRefresh()}
+                aria-label="Refresh"
+                icon={<ArrowClockwiseRegular />}
+              />
+            </>
+          )}
           {canTransferFile && (
             <>
               <ToolbarDivider />
@@ -311,7 +344,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                 <>
                   <ToolbarButton disabled={!canSave} onClick={handleSave} aria-label="Save" icon={<SaveRegular />} />
                   <ToolbarButton
-                    disabled={!canSave}
+                    disabled={isSaving || (!canSave && !(vm.selectedResource?.isSavedNotPublished && isCustomizable))}
                     onClick={handleSaveAndPublish}
                     aria-label="Save and Publish"
                     icon={<CloudArrowUpRegular />}
@@ -321,7 +354,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
               {canTransferFile && (
                 <>
                   <ToolbarButton
-                    disabled={!isCustomizable}
+                    disabled={!isCustomizable || isSaving}
                     onClick={handleUploadFile}
                     aria-label="Upload file"
                     icon={<ArrowUploadRegular />}
@@ -350,6 +383,24 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                   />
                 </>
               )}
+              {isResxResource && (
+                <>
+                  <ToolbarDivider />
+                  <ToolbarButton
+                    disabled={!isCustomizable || isSaving}
+                    onClick={() => vm.triggerResxAddRow()}
+                    aria-label="Add Row"
+                    icon={<AddRegular />}
+                  />
+                  <SearchBox
+                    size="small"
+                    placeholder="Search resources..."
+                    value={vm.resxSearchFilter}
+                    onChange={(_, data) => vm.setResxSearchFilter(data.value)}
+                    style={{ minWidth: "150px" }}
+                  />
+                </>
+              )}
             </>
           )}
         </ToolbarGroup>
@@ -369,7 +420,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
         {drawerOpen && (
           <div style={{ width: `${drawerWidth}px`, minWidth: "220px", maxWidth: "600px", position: "relative" }}>
             <NavDrawer open type="inline" style={{ width: "100%", height: "100%" }}>
-              <NavDrawerHeader>
+              <NavDrawerHeader style={{ padding: "8px 8px 0 8px" }}>
                 <SearchBox
                   placeholder="Search web resources"
                   size="small"
@@ -378,7 +429,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                 />
               </NavDrawerHeader>
               <NavDrawerBody>
-                <div style={{ padding: "16px", overflowY: "auto", height: "100%" }}>
+                <div style={{ overflowY: "auto", height: "100%" }}>
                   {vm.selectedSolution ? (
                     <WebResourceTree vm={vm} dvSvc={dvSvc} onLog={onLog} />
                   ) : (
