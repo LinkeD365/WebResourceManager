@@ -1,6 +1,6 @@
 {
   "name": "@linked365/webresourcemanager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "Web Resource Manager",
   "description": "A PPTB tool to manage web resources in Power Platform.",
   "main": "index.html",

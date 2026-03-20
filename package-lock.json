@@ -1,12 +1,12 @@
 {
   "name": "@linked365/webresourcemanager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@linked365/webresourcemanager",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "license": "MIT",
       "dependencies": {
         "@fluentui/react-components": "^9.72.7",
