@@ -29,6 +29,7 @@ import {
   ArrowDownloadRegular,
   AddRegular,
   ArrowClockwiseRegular,
+  SearchRegular,
 } from "@fluentui/react-icons";
 import { minify } from "terser";
 
@@ -42,6 +43,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   const { connection, dvSvc, vm, onLog } = props;
   const [loadingSolutions, setLoadingSolutions] = useState(false);
   const [solutionSearch, setSolutionSearch] = useState("");
+  const [codeSearchTrigger, setCodeSearchTrigger] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerWidth, setDrawerWidth] = useState(320);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -387,6 +389,11 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                 <>
                   <ToolbarDivider />
                   <ToolbarButton
+                    onClick={() => setCodeSearchTrigger((trigger) => trigger + 1)}
+                    aria-label="Search code"
+                    icon={<SearchRegular />}
+                  />
+                  <ToolbarButton
                     disabled={!canPrettify}
                     onClick={handlePrettify}
                     aria-label="Prettify Code"
@@ -478,6 +485,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
             onLog={onLog}
             drawerOpen={drawerOpen}
             onToggleDrawer={() => setDrawerOpen((open) => !open)}
+            codeSearchTrigger={codeSearchTrigger}
           />
         </div>
       </div>

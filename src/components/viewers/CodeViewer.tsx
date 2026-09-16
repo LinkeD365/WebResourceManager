@@ -1,7 +1,5 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { WebResource } from "../../model/viewModel";
-import { Button } from "@fluentui/react-components";
-import { SearchRegular } from "@fluentui/react-icons";
 import AceEditor from "react-ace";
 import type { IAceEditor } from "react-ace/lib/types";
 import "ace-builds/src-noconflict/mode-javascript";
@@ -20,6 +18,7 @@ const beautifyJs = beautify.js;
 
 interface CodeViewerProps {
   resource: WebResource;
+  searchTrigger: number;
 }
 
 const getModeFromType = (type: number): string => {
@@ -56,11 +55,12 @@ const getCurrentTheme = (): string => {
   return isDark ? "monokai" : "chrome";
 };
 
-export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
+export const CodeViewer: React.FC<CodeViewerProps> = ({ resource, searchTrigger }) => {
   const mode = getModeFromType(resource.type);
   const [formattedContent, setFormattedContent] = useState<string | null>(null);
   const theme = getCurrentTheme();
   const editorRef = useRef<IAceEditor | null>(null);
+  const lastSearchTriggerRef = useRef(searchTrigger);
 
   const handleEditorChange = (newContent: string) => {
     setFormattedContent(newContent);
@@ -69,9 +69,11 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
 
   const displayContent = formattedContent || resource.stringContent;
 
-  const handleSearch = () => {
+  useEffect(() => {
+    if (searchTrigger === lastSearchTriggerRef.current) return;
+    lastSearchTriggerRef.current = searchTrigger;
     editorRef.current?.execCommand("find");
-  };
+  }, [searchTrigger]);
 
   if (!resource.stringContent) {
     return <p>No content available</p>;
@@ -84,11 +86,6 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
           This file is not customizable
         </div>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 0 8px" }}>
-        <Button appearance="subtle" size="small" icon={<SearchRegular />} onClick={handleSearch}>
-          Search code
-        </Button>
-      </div>
       <AceEditor
         mode={mode}
         theme={theme}
