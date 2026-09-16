@@ -389,6 +389,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
                 <>
                   <ToolbarDivider />
                   <ToolbarButton
+                    disabled={vm.selectedResource?.stringContent === null}
                     onClick={() => setCodeSearchTrigger((trigger) => trigger + 1)}
                     aria-label="Search code"
                     icon={<SearchRegular />}
