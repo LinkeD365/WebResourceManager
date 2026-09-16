@@ -34,7 +34,7 @@ jobs:
 
       - name: Build
         run: |
-          npm install -g npm@latest
+          npm install -g npm@10
           npm ci
           npm run build
           npm publish --provenance
