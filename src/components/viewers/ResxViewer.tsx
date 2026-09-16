@@ -85,7 +85,7 @@ export const ResxViewer: React.FC<ResxViewerProps> = observer(({ resource, vm })
   const lastTriggerRef = useRef(vm.resxAddRowTrigger);
   const gridRef = useRef<AgGridReact>(null);
   const newRowIdRef = useRef<number | null>(null);
-
+  
   // Reset entries when switching to a different resource (intentionally only depends on resource.id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {

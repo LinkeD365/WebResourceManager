@@ -4,7 +4,7 @@ import { observer } from "mobx-react";
 import { SolutionMeta, ViewModel } from "../model/viewModel";
 import { dvService } from "../services/dataverseService";
 import {
-  Dropdown,
+  Combobox,
   Option,
   Spinner,
   NavDrawer,
@@ -29,6 +29,7 @@ import {
   ArrowDownloadRegular,
   AddRegular,
   ArrowClockwiseRegular,
+  SearchRegular,
 } from "@fluentui/react-icons";
 import { minify } from "terser";
 
@@ -41,6 +42,8 @@ interface WebResourceManagerProps {
 export const WebResourceManager = observer((props: WebResourceManagerProps): React.JSX.Element => {
   const { connection, dvSvc, vm, onLog } = props;
   const [loadingSolutions, setLoadingSolutions] = useState(false);
+  const [solutionSearch, setSolutionSearch] = useState("");
+  const [codeSearchTrigger, setCodeSearchTrigger] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerWidth, setDrawerWidth] = useState(320);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -78,11 +81,23 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   const handleSolutionSelect = (_: any, data: { optionValue?: string }) => {
     if (!data.optionValue) {
       vm.selectedSolution = null;
+      setSolutionSearch("");
       return;
     }
     const selected = vm.solutions.find((s: SolutionMeta) => s.id === data.optionValue) ?? null;
     vm.selectedSolution = selected;
+    setSolutionSearch(selected?.name ?? "");
   };
+
+  const normalizedSolutionSearch = solutionSearch.trim().toLowerCase();
+  const filteredSolutions =
+    !normalizedSolutionSearch || normalizedSolutionSearch === vm.selectedSolution?.name.toLowerCase()
+      ? vm.solutions
+      : vm.solutions.filter(
+          (solution) =>
+            solution.name.toLowerCase().includes(normalizedSolutionSearch) ||
+            solution.uniqueName.toLowerCase().includes(normalizedSolutionSearch),
+        );
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -311,20 +326,24 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
           {loadingSolutions ? (
             <Spinner size="tiny" label="Loading solutions..." />
           ) : (
-            <Dropdown
+            <Combobox
               placeholder="Select a solution..."
               onOptionSelect={handleSolutionSelect}
-              value={vm.selectedSolution?.name ?? ""}
+              onChange={(event) => setSolutionSearch(event.target.value)}
+              value={solutionSearch}
+              selectedOptions={vm.selectedSolution ? [vm.selectedSolution.id] : []}
               disabled={vm.solutions.length === 0}
               inlinePopup
+              aria-label="Search and select a solution"
               style={{ minWidth: `${drawerWidth - 16}px` }}
             >
-              {vm.solutions.map((solution: SolutionMeta) => (
+              {filteredSolutions.map((solution: SolutionMeta) => (
                 <Option key={solution.id} value={solution.id} text={solution.name}>
                   {solution.name}
                 </Option>
               ))}
-            </Dropdown>
+              {filteredSolutions.length === 0 && <Option disabled>No solutions found</Option>}
+            </Combobox>
           )}
 
           {vm.selectedResource && (
@@ -369,6 +388,12 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
               {isCodeViewerResource && (
                 <>
                   <ToolbarDivider />
+                  <ToolbarButton
+                    disabled={vm.selectedResource?.stringContent === null}
+                    onClick={() => setCodeSearchTrigger((trigger) => trigger + 1)}
+                    aria-label="Search code"
+                    icon={<SearchRegular />}
+                  />
                   <ToolbarButton
                     disabled={!canPrettify}
                     onClick={handlePrettify}
@@ -461,6 +486,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
             onLog={onLog}
             drawerOpen={drawerOpen}
             onToggleDrawer={() => setDrawerOpen((open) => !open)}
+            codeSearchTrigger={codeSearchTrigger}
           />
         </div>
       </div>
