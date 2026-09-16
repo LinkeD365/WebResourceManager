@@ -70,12 +70,12 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource, searchTrigger 
   const displayContent = formattedContent || resource.stringContent;
 
   useEffect(() => {
-    if (searchTrigger === lastSearchTriggerRef.current) return;
+    if (!editorRef.current || searchTrigger === lastSearchTriggerRef.current) return;
     lastSearchTriggerRef.current = searchTrigger;
-    editorRef.current?.execCommand("find");
+    editorRef.current.execCommand("find");
   }, [searchTrigger]);
 
-  if (!resource.stringContent) {
+  if (resource.stringContent === null) {
     return <p>No content available</p>;
   }
 
@@ -94,6 +94,10 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource, searchTrigger 
         readOnly={!resource.isCustomizable || resource.isSaving}
         onLoad={(editor) => {
           editorRef.current = editor;
+          if (searchTrigger !== lastSearchTriggerRef.current) {
+            lastSearchTriggerRef.current = searchTrigger;
+            editor.execCommand("find");
+          }
         }}
         width="100%"
         height="100%"
