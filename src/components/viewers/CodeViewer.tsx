@@ -1,5 +1,7 @@
 import React, { useState, useRef } from "react";
 import { WebResource } from "../../model/viewModel";
+import { Button } from "@fluentui/react-components";
+import { SearchRegular } from "@fluentui/react-icons";
 import AceEditor from "react-ace";
 import type { IAceEditor } from "react-ace/lib/types";
 import "ace-builds/src-noconflict/mode-javascript";
@@ -8,6 +10,7 @@ import "ace-builds/src-noconflict/mode-html";
 import "ace-builds/src-noconflict/mode-xml";
 import "ace-builds/src-noconflict/theme-chrome";
 import "ace-builds/src-noconflict/theme-monokai";
+import "ace-builds/src-noconflict/ext-searchbox";
 // @ts-ignore
 import beautify from "js-beautify";
 
@@ -66,6 +69,10 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
 
   const displayContent = formattedContent || resource.stringContent;
 
+  const handleSearch = () => {
+    editorRef.current?.execCommand("find");
+  };
+
   if (!resource.stringContent) {
     return <p>No content available</p>;
   }
@@ -77,6 +84,11 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
           This file is not customizable
         </div>
       )}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 0 8px" }}>
+        <Button appearance="subtle" size="small" icon={<SearchRegular />} onClick={handleSearch}>
+          Search code
+        </Button>
+      </div>
       <AceEditor
         mode={mode}
         theme={theme}
