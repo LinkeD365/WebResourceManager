@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { WebResource } from "../../model/viewModel";
 import AceEditor from "react-ace";
 import type { IAceEditor } from "react-ace/lib/types";
@@ -8,6 +8,7 @@ import "ace-builds/src-noconflict/mode-html";
 import "ace-builds/src-noconflict/mode-xml";
 import "ace-builds/src-noconflict/theme-chrome";
 import "ace-builds/src-noconflict/theme-monokai";
+import "ace-builds/src-noconflict/ext-searchbox";
 // @ts-ignore
 import beautify from "js-beautify";
 
@@ -17,6 +18,7 @@ const beautifyJs = beautify.js;
 
 interface CodeViewerProps {
   resource: WebResource;
+  searchTrigger: number;
 }
 
 const getModeFromType = (type: number): string => {
@@ -53,11 +55,12 @@ const getCurrentTheme = (): string => {
   return isDark ? "monokai" : "chrome";
 };
 
-export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
+export const CodeViewer: React.FC<CodeViewerProps> = ({ resource, searchTrigger }) => {
   const mode = getModeFromType(resource.type);
   const [formattedContent, setFormattedContent] = useState<string | null>(null);
   const theme = getCurrentTheme();
   const editorRef = useRef<IAceEditor | null>(null);
+  const lastSearchTriggerRef = useRef(searchTrigger);
 
   const handleEditorChange = (newContent: string) => {
     setFormattedContent(newContent);
@@ -65,6 +68,12 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ resource }) => {
   };
 
   const displayContent = formattedContent || resource.stringContent;
+
+  useEffect(() => {
+    if (searchTrigger === lastSearchTriggerRef.current) return;
+    lastSearchTriggerRef.current = searchTrigger;
+    editorRef.current?.execCommand("find");
+  }, [searchTrigger]);
 
   if (!resource.stringContent) {
     return <p>No content available</p>;

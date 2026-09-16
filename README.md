@@ -6,7 +6,7 @@ A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, 
 
 ### Solution Browser
 
-- Select from available unmanaged solutions
+- Search and select from available unmanaged solutions by friendly or unique name
 - Hierarchical tree view of web resources organised by folder path
 - Resizable side panel (220–600px) with expand/collapse toggle
 - Full-text search across resource names and paths (with 300ms debounce)
@@ -22,7 +22,7 @@ A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, 
 
 | Type  | Formats                         | Viewer        | Capabilities                                                                                                                                   |
 | ----- | ------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Code  | HTML, CSS, JavaScript, XML, XSL | Ace Editor    | Syntax highlighting, line numbers, light/dark theme                                                                                            |
+| Code  | HTML, CSS, JavaScript, XML, XSL | Ace Editor    | Syntax highlighting, content search with match highlighting, line numbers, light/dark theme                                                     |
 | Image | PNG, JPEG, GIF                  | Image preview | Zoom (25–400%), copy base64 to clipboard                                                                                                       |
 | SVG   | SVG                             | Inline render | Zoom (25–800%), copy source to clipboard                                                                                                       |
 | RESX  | RESX                            | Data grid     | Editable Name/Value columns, read-only Comment column (text selectable for copying), add rows, sortable, resizable & wrapping columns         |

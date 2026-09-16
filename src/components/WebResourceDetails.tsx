@@ -37,6 +37,7 @@ interface WebResourceDetailsProps {
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
+  codeSearchTrigger: number;
 }
 
 const decodeBase64ToString = (value: string): string => {
@@ -136,7 +137,7 @@ const OverflowMenuTrigger = ({ tabs, onTabSelect }: OverflowMenuProps) => {
 };
 
 export const WebResourceDetails = observer(
-  ({ vm, dvSvc, onLog, drawerOpen, onToggleDrawer }: WebResourceDetailsProps): React.JSX.Element => {
+  ({ vm, dvSvc, onLog, drawerOpen, onToggleDrawer, codeSearchTrigger }: WebResourceDetailsProps): React.JSX.Element => {
     const refreshTrigger = vm.selectedResource?.refreshTrigger ?? 0;
 
     useEffect(() => {
@@ -336,7 +337,7 @@ export const WebResourceDetails = observer(
                   if (type === 12) return <ResxViewer resource={vm.selectedResource} vm={vm} />;
                   if (type === 11) return <SvgViewer resource={vm.selectedResource} />;
                   if ([5, 6, 7].includes(type)) return <ImageViewer resource={vm.selectedResource} />;
-                  return <CodeViewer resource={vm.selectedResource} />;
+                  return <CodeViewer resource={vm.selectedResource} searchTrigger={codeSearchTrigger} />;
                 })()}
             </div>
           ) : (
