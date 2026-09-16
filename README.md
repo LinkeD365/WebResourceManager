@@ -35,6 +35,7 @@ A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, 
 - **Download** — export resource to a local file with correct extension and MIME type
 - **Prettify** — format HTML, CSS, or JavaScript 
 - **Minify** — minify HTML or JavaScript 
+- **Search** — find and highlight matches within code resource content
 - **Edit Resources** - Modify resource files
 - **Refresh** — reload the resource content from Dataverse, discarding any unsaved local changes
 
