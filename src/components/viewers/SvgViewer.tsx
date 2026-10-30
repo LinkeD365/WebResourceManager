@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { WebResource } from "../../model/viewModel";
 import { Button, Slider, tokens } from "@fluentui/react-components";
 import { Copy24Regular } from "@fluentui/react-icons";
+import { sanitizeSvg } from "./sanitizeSvg";
 
 interface SvgViewerProps {
   resource: WebResource;
@@ -15,6 +16,11 @@ const copyToClipboard = (content: string) => {
 
 export const SvgViewer: React.FC<SvgViewerProps> = ({ resource }) => {
   const [scale, setScale] = useState<number>(200);
+  const imageSource = useMemo(() => {
+    if (!resource.stringContent) return null;
+    const sanitized = sanitizeSvg(resource.stringContent);
+    return sanitized ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sanitized)}` : null;
+  }, [resource.stringContent]);
 
   if (!resource.stringContent) {
     return <p>No SVG content available</p>;
@@ -78,13 +84,15 @@ export const SvgViewer: React.FC<SvgViewerProps> = ({ resource }) => {
             transition: "transform 0.2s ease-out",
           }}
         >
-          <div
-            dangerouslySetInnerHTML={{ __html: resource.stringContent }}
-            style={{
-              maxWidth: "100%",
-              maxHeight: "100%",
-            }}
-          />
+          {imageSource ? (
+            <img
+              src={imageSource}
+              alt={`${resource.fileName} preview`}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <p role="alert">This SVG is invalid or contains no renderable SVG document.</p>
+          )}
         </div>
       </div>
     </div>

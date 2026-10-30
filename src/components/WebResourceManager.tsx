@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { observer } from "mobx-react";
-import { SolutionMeta, ViewModel } from "../model/viewModel";
+import { SolutionMeta, ViewModel, WebResource } from "../model/viewModel";
 import { dvService } from "../services/dataverseService";
 import {
   Combobox,
@@ -32,6 +32,13 @@ import {
   SearchRegular,
 } from "@fluentui/react-icons";
 import { minify } from "terser";
+import { isSameWriteTarget, WriteConfirmationDialog, WriteReviewTarget } from "./WriteConfirmationDialog";
+
+type PendingWrite = {
+  action: "save" | "save-publish" | "publish";
+  resource: WebResource;
+  target: WriteReviewTarget;
+};
 
 interface WebResourceManagerProps {
   connection: ToolBoxAPI.DataverseConnection | null;
@@ -46,6 +53,8 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   const [codeSearchTrigger, setCodeSearchTrigger] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerWidth, setDrawerWidth] = useState(320);
+  const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
+  const [isConfirmingWrite, setIsConfirmingWrite] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef(false);
@@ -233,63 +242,89 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
     }
   };
 
-  const handleSave = async () => {
-    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
-    const resource = vm.selectedResource;
-    resource.isSaving = true;
-    try {
-      const resourceLabel = isImageResource ? "image" : "web resource";
-      onLog(`Saving ${resourceLabel}...`, "info");
-      await dvSvc.saveWebResourceContent(resource.id, resource.stringContent!);
-      resource.markClean();
-      onLog(`Saved ${resource.name}`, "success");
-      await window.toolboxAPI.utils.showNotification({
-        title: "Save Successful",
-        body: `Saved ${resource.name}`,
-        type: "success",
-      });
-    } catch (err) {
-      onLog(`Failed to save: ${err}`, "error");
-      await window.toolboxAPI.utils.showNotification({
-        title: "Save Failed",
-        body: `Failed to save: ${err}`,
-        type: "error",
-      });
-    } finally {
-      resource.isSaving = false;
-    }
+  const requestWriteConfirmation = (action: PendingWrite["action"]) => {
+    if (!connection || !vm.selectedResource) return;
+    setPendingWrite({
+      action,
+      resource: vm.selectedResource,
+      target: {
+        id: connection.id,
+        name: connection.name,
+        url: connection.url,
+        environment: connection.environment,
+      },
+    });
   };
 
-  const handleSaveAndPublish = async () => {
-    if (!vm.selectedResource || vm.selectedResource.stringContent === null) return;
-    const resource = vm.selectedResource;
+  const exportOriginalBackup = async (resource: WebResource): Promise<string | null> => {
+    if (resource.originalContent === null) {
+      throw new Error("The original resource content is unavailable; a backup cannot be created.");
+    }
+
+    const config = getResourceFileConfig(resource.type);
+    const content = [5, 6, 7].includes(resource.type)
+      ? Uint8Array.from(atob(resource.originalContent), (character) => character.charCodeAt(0))
+      : resource.originalContent;
+    const defaultName = `${resource.fileName}.backup.${config.extension}`;
+    return window.toolboxAPI.fileSystem.saveFile(defaultName, content, [
+      { name: `${config.label} backup`, extensions: [config.extension] },
+    ]);
+  };
+
+  const confirmPendingWrite = async () => {
+    if (!pendingWrite) return;
+    if (!isSameWriteTarget(connection, pendingWrite.target)) {
+      onLog("The active connection changed. Review the operation again before writing.", "error");
+      return;
+    }
+
+    const { action, resource } = pendingWrite;
+    if (resource.stringContent === null) {
+      onLog("Resource content is unavailable. No Dataverse change was made.", "error");
+      setPendingWrite(null);
+      return;
+    }
+
+    setIsConfirmingWrite(true);
     resource.isSaving = true;
     try {
-      const resourceLabel = isImageResource ? "image" : "web resource";
-      if (resource.isDirty) {
-        onLog(`Saving and publishing ${resourceLabel}...`, "info");
-        await dvSvc.saveWebResourceContent(resource.id, resource.stringContent!);
+      if (action === "save" || (action === "save-publish" && resource.isDirty)) {
+        await dvSvc.saveWebResourceContent(
+          resource.id,
+          resource.stringContent,
+          resource.name,
+          [5, 6, 7].includes(resource.type),
+        );
         resource.markClean();
-      } else {
-        onLog(`Publishing ${resourceLabel}...`, "info");
       }
-      await dvSvc.publishWebResource(resource.id);
-      resource.markPublished();
-      onLog(`Saved and published ${resource.name}`, "success");
+      if (action !== "save") {
+        await dvSvc.publishWebResource(resource.id, resource.name);
+        resource.markPublished();
+      }
+
+      const body =
+        action === "save"
+          ? `Saved ${resource.name}`
+          : action === "save-publish"
+            ? `Saved and published ${resource.name}`
+            : `Published ${resource.name}`;
+      onLog(body, "success");
       await window.toolboxAPI.utils.showNotification({
-        title: "Saved and Published",
-        body: `Saved and published ${resource.name}`,
+        title: action === "save" ? "Save Successful" : "Publish Successful",
+        body,
         type: "success",
       });
-    } catch (err) {
-      onLog(`Failed to save and publish: ${err}`, "error");
+    } catch (error) {
+      onLog(`Failed to ${action}: ${error}`, "error");
       await window.toolboxAPI.utils.showNotification({
-        title: "Save and Publish Failed",
-        body: `Failed to save and publish: ${err}`,
+        title: action === "save" ? "Save Failed" : "Publish Failed",
+        body: `Failed to ${action}: ${error}`,
         type: "error",
       });
     } finally {
       resource.isSaving = false;
+      setIsConfirmingWrite(false);
+      setPendingWrite(null);
     }
   };
 
@@ -297,7 +332,10 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
     if (!vm.selectedResource || !vm.selectedResource.stringContent) return;
 
     const config = getResourceFileConfig(vm.selectedResource.type);
-    const fileName = `${vm.selectedResource.name}.${config.extension}`;
+    const fileName = vm.selectedResource.fileName;
+    const normalizedFileName = fileName.toLowerCase().endsWith(`.${config.extension}`)
+      ? fileName
+      : `${fileName}.${config.extension}`;
 
     const element = document.createElement("a");
     if (isImageResource) {
@@ -307,16 +345,16 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
       element.href = URL.createObjectURL(file);
     }
 
-    element.download = fileName;
+    element.download = normalizedFileName;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
 
     if (!isImageResource) {
-      URL.revokeObjectURL(element.href);
+      setTimeout(() => URL.revokeObjectURL(element.href), 0);
     }
 
-    onLog(`Downloaded ${fileName}`, "success");
+    onLog(`Downloaded ${normalizedFileName}`, "success");
   };
 
   const toolBar = (
@@ -361,10 +399,17 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
               <ToolbarDivider />
               {canSaveResource && (
                 <>
-                  <ToolbarButton disabled={!canSave} onClick={handleSave} aria-label="Save" icon={<SaveRegular />} />
+                  <ToolbarButton
+                    disabled={!canSave}
+                    onClick={() => requestWriteConfirmation("save")}
+                    aria-label="Save"
+                    icon={<SaveRegular />}
+                  />
                   <ToolbarButton
                     disabled={isSaving || (!canSave && !(vm.selectedResource?.isSavedNotPublished && isCustomizable))}
-                    onClick={handleSaveAndPublish}
+                    onClick={() =>
+                      requestWriteConfirmation(vm.selectedResource?.isDirty ? "save-publish" : "publish")
+                    }
                     aria-label="Save and Publish"
                     icon={<CloudArrowUpRegular />}
                   />
@@ -490,6 +535,49 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
           />
         </div>
       </div>
+      {pendingWrite && (
+        <WriteConfirmationDialog
+          open
+          title={
+            pendingWrite.action === "save"
+              ? "Review content save"
+              : pendingWrite.action === "save-publish"
+                ? "Review save and publish"
+                : "Review publish"
+          }
+          actionLabel={
+            pendingWrite.action === "save"
+              ? "Confirm save"
+              : pendingWrite.action === "save-publish"
+                ? "Confirm save and publish"
+                : "Confirm publish"
+          }
+          target={pendingWrite.target}
+          connectionMatches={
+            isSameWriteTarget(connection, pendingWrite.target) &&
+            isSameWriteTarget(dvSvc.connection, pendingWrite.target)
+          }
+          changes={[
+            `${pendingWrite.resource.name} (web resource ID ${pendingWrite.resource.id})`,
+            pendingWrite.action === "publish"
+              ? "Publish the saved content to users."
+              : "Replace the saved content with the editor contents.",
+          ]}
+          rollbackNotice={
+            pendingWrite.action === "publish"
+              ? "Publishing affects users of this environment. It is not automatically reversible."
+              : "The current content must be exported before the write. Rollback is manual: restore the exported backup and publish it if needed."
+          }
+          requiresBackup={
+            pendingWrite.resource.isDirty &&
+            (pendingWrite.action === "save" || pendingWrite.action === "save-publish")
+          }
+          onExportBackup={() => exportOriginalBackup(pendingWrite.resource)}
+          onConfirm={confirmPendingWrite}
+          onClose={() => setPendingWrite(null)}
+          isBusy={isConfirmingWrite}
+        />
+      )}
     </div>
   );
 });

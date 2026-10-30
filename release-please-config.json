@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "bd0c0791199c1a50dd27cb72234452802c4228c8",
+  "include-component-in-tag": false,
+  "include-v-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@linked365/webresourcemanager"
+    }
+  }
+}
