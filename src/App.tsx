@@ -129,13 +129,18 @@ function App() {
     return new dvService({
       connection: connection,
       dvApi: window.dataverseAPI,
+      getActiveConnection: () => window.toolboxAPI.connections.getActiveConnection(),
       onLog: addLog,
     });
   }, [connection, addLog]);
 
   return (
-    <FluentProvider theme={theme === "dark" ? webDarkTheme : webLightTheme} className={styles.root}>
-      <WebResourceManager connection={connection} dvSvc={dvSvc!} vm={vm} onLog={addLog} />
+    <FluentProvider
+      theme={theme === "dark" ? webDarkTheme : webLightTheme}
+      className={styles.root}
+      applyStylesToPortals={false}
+    >
+      <WebResourceManager connection={connection} dvSvc={dvSvc} vm={vm} onLog={addLog} />
     </FluentProvider>
   );
 }

@@ -264,6 +264,7 @@ export const WebResourceDetails = observer(
                           appearance="subtle"
                           size="small"
                           icon={<Dismiss16Regular />}
+                          aria-label={`Close ${tab.fileName}`}
                           onClick={(e) => handleCloseTab(e, tab.id)}
                           style={{ minWidth: "20px", padding: "2px" }}
                         />

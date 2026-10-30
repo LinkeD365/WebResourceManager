@@ -13,9 +13,19 @@ import {
   Dropdown,
   Option,
   Label,
-  Spinner,
 } from "@fluentui/react-components";
 import { dvService } from "../services/dataverseService";
+import { isSameWriteTarget, WriteConfirmationDialog, WriteReviewTarget } from "./WriteConfirmationDialog";
+
+interface PendingCreate {
+  name: string;
+  displayName: string;
+  type: number;
+  solutionId: string;
+  solutionUniqueName: string;
+  solutionName: string;
+  target: WriteReviewTarget;
+}
 
 const resourceTypeOptions = [
   { type: 1, label: "HTML" },
@@ -47,7 +57,7 @@ interface NewResourceDialogProps {
   open: boolean;
   folder: string;
   vm: ViewModel;
-  dvSvc: dvService;
+  dvSvc: dvService | null;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
   onClose: () => void;
 }
@@ -58,32 +68,70 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
     const [displayName, setDisplayName] = useState("");
     const [type, setType] = useState<number>(3);
     const [creating, setCreating] = useState(false);
+    const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
 
-    const handleCreate = useCallback(async () => {
-      if (!name.trim() || !vm.selectedSolution) return;
+    const handleCreate = useCallback(() => {
+      if (!name.trim() || !vm.selectedSolution || !dvSvc) return;
+      const connection = dvSvc.connection;
+      if (!connection) return;
+      const ext = extensionForType[type] ?? "";
+      const nameWithExt = name.endsWith(ext) ? name : name + ext;
+      const fullName = folder ? `${folder}/${nameWithExt}` : nameWithExt;
+      setPendingCreate({
+        name: fullName,
+        displayName: displayName || nameWithExt,
+        type,
+        solutionId: vm.selectedSolution.id,
+        solutionUniqueName: vm.selectedSolution.uniqueName,
+        solutionName: vm.selectedSolution.name,
+        target: {
+          id: connection.id,
+          name: connection.name,
+          url: connection.url,
+          environment: connection.environment,
+        },
+      });
+    }, [name, displayName, type, folder, vm, dvSvc]);
+
+    const confirmCreate = useCallback(async () => {
+      if (!pendingCreate || !dvSvc) return;
       setCreating(true);
       try {
-        const ext = extensionForType[type] ?? "";
-        const nameWithExt = name.endsWith(ext) ? name : name + ext;
-        const fullName = folder ? `${folder}/${nameWithExt}` : nameWithExt;
+        if (!isSameWriteTarget(dvSvc.connection, pendingCreate.target)) {
+          throw new Error("The active connection changed. Review the operation again before creating a resource.");
+        }
         const id = await dvSvc.createWebResource(
-          fullName,
-          displayName || nameWithExt,
-          type,
-          vm.selectedSolution.uniqueName,
+          pendingCreate.name,
+          pendingCreate.displayName,
+          pendingCreate.type,
+          pendingCreate.solutionId,
+          pendingCreate.solutionUniqueName,
         );
-        const resource = new WebResource(id, fullName, displayName || nameWithExt, type, fullName, true);
+        const resource = new WebResource(
+          id,
+          pendingCreate.name,
+          pendingCreate.displayName,
+          pendingCreate.type,
+          pendingCreate.name,
+          true,
+        );
         resource.stringContent = " ";
         resource.originalContent = " ";
         vm.addWebResource(resource);
-        onLog(`Created web resource: ${fullName}`, "success");
+        onLog(`Created web resource: ${pendingCreate.name}`, "success");
+        setPendingCreate(null);
         onClose();
       } catch (err) {
         onLog(`Failed to create web resource: ${err}`, "error");
+        await window.toolboxAPI.utils.showNotification({
+          title: "Create Failed",
+          body: `Failed to create web resource: ${err}`,
+          type: "error",
+        });
       } finally {
         setCreating(false);
       }
-    }, [name, displayName, type, folder, vm, dvSvc, onLog, onClose]);
+    }, [pendingCreate, dvSvc, vm, onLog, onClose]);
 
     const handleOpenChange = (_: any, data: { open: boolean }) => {
       if (!data.open) {
@@ -101,7 +149,8 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
     }, [open]);
 
     return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <>
+      <Dialog open={open && !pendingCreate} onOpenChange={handleOpenChange}>
         <DialogSurface>
           <DialogBody>
             <DialogTitle>New Web Resource</DialogTitle>
@@ -150,8 +199,12 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
               </div>
             </DialogContent>
             <DialogActions>
-              <Button appearance="primary" onClick={handleCreate} disabled={!name.trim() || creating}>
-                {creating ? <Spinner size="extra-tiny" /> : "Create"}
+              <Button
+                appearance="primary"
+                onClick={handleCreate}
+                disabled={!name.trim() || !vm.selectedSolution || !dvSvc?.connection || creating}
+              >
+                Review
               </Button>
               <Button appearance="secondary" onClick={onClose} disabled={creating}>
                 Cancel
@@ -160,6 +213,24 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
           </DialogBody>
         </DialogSurface>
       </Dialog>
+      {pendingCreate && (
+        <WriteConfirmationDialog
+          open={open}
+          title="Review new web resource"
+          actionLabel={creating ? "Creating..." : "Confirm create"}
+          target={pendingCreate.target}
+          connectionMatches={!!dvSvc && isSameWriteTarget(dvSvc.connection, pendingCreate.target)}
+          changes={[
+            `Create ${pendingCreate.name} (${resourceTypeOptions.find((option) => option.type === pendingCreate.type)?.label ?? "web resource"})`,
+            `Add it to solution ${pendingCreate.solutionName} (${pendingCreate.solutionUniqueName})`,
+          ]}
+          rollbackNotice="If adding the resource to the solution fails, the tool attempts to delete the newly created resource. There is no automatic undo after creation succeeds."
+          onConfirm={confirmCreate}
+          onClose={() => setPendingCreate(null)}
+          isBusy={creating}
+        />
+      )}
+      </>
     );
   },
 );

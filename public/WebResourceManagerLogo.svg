@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 64 64"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="1.25"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- Browser window -->
+  <rect x="5" y="6" width="54" height="52" rx="4"/>
+
+  <!-- Browser controls -->
+  <circle cx="11" cy="12" r="1.2"/>
+  <circle cx="16" cy="12" r="1.2"/>
+  <circle cx="21" cy="12" r="1.2"/>
+  <path d="M5 18H59"/>
+
+  <!-- Code resource -->
+  <path d="M11 23H20L24 27V36H11Z"/>
+  <path d="M20 23V27H24"/>
+  <path d="M15 29L13 31L15 33"/>
+  <path d="M20 29L22 31L20 33"/>
+  <path d="M18.5 28L16.5 34"/>
+
+  <!-- Resource details -->
+  <path d="M29 27H47"/>
+  <path d="M29 31H42"/>
+
+  <!-- Image resource -->
+  <path d="M11 39H20L24 43V52H11Z"/>
+  <path d="M20 39V43H24"/>
+  <circle cx="16" cy="45" r="1"/>
+  <path d="M13 50L16 47L18 49L20 47L22 50"/>
+
+  <!-- Resource details -->
+  <path d="M29 43H38"/>
+  <path d="M29 47H36"/>
+
+  <!-- Cog -->
+  <path
+    d="M48 36
+       L51 36.6
+       L52.2 39
+       L55 38.2
+       L57.8 41
+       L57 43.8
+       L59.4 45
+       L60 48
+       L59.4 51
+       L57 52.2
+       L57.8 55
+       L55 57.8
+       L52.2 57
+       L51 59.4
+       L48 60
+       L45 59.4
+       L43.8 57
+       L41 57.8
+       L38.2 55
+       L39 52.2
+       L36.6 51
+       L36 48
+       L36.6 45
+       L39 43.8
+       L38.2 41
+       L41 38.2
+       L43.8 39
+       L45 36.6
+       Z"
+    fill="#c2abcf"
+    stroke="currentColor"
+    stroke-width="0.65"/>
+
+  <!-- Cog centre hole -->
+  <circle cx="48"
+          cy="48"
+          r="5"
+          fill="currentColor"
+          stroke="currentColor"
+          stroke-width="0.65"/>
+
+</svg>

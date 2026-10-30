@@ -5,20 +5,99 @@ export interface WebResourcesResult {
   pagingCookie?: string;
 }
 
+export interface WebResourceNameState {
+  id: string;
+  name: string;
+  displayName: string | null;
+}
+
 interface dvServiceProps {
   connection: ToolBoxAPI.DataverseConnection | null;
   dvApi: DataverseAPI.API;
+  getActiveConnection: () => Promise<ToolBoxAPI.DataverseConnection | null>;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
 }
+
+export interface WebResourceRename {
+  id: string;
+  oldName: string;
+  oldDisplayName: string;
+  newName: string;
+}
+
+const encodeBase64 = (value: string): string => {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+};
+
+const escapeXmlAttribute = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
 export class dvService {
   connection: ToolBoxAPI.DataverseConnection | null;
   dvApi: DataverseAPI.API;
+  getActiveConnection: () => Promise<ToolBoxAPI.DataverseConnection | null>;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
   batchSize = 2;
   constructor(props: dvServiceProps) {
     this.connection = props.connection;
     this.dvApi = props.dvApi;
+    this.getActiveConnection = props.getActiveConnection;
     this.onLog = props.onLog;
+  }
+
+  private async assertActiveConnection(): Promise<void> {
+    if (!this.connection) {
+      throw new Error("No connection available");
+    }
+
+    const activeConnection = await this.getActiveConnection();
+    const normalizeUrl = (url: string) => url.replace(/\/+$/, "").toLowerCase();
+    if (
+      !activeConnection ||
+      activeConnection.id !== this.connection.id ||
+      normalizeUrl(activeConnection.url) !== normalizeUrl(this.connection.url) ||
+      activeConnection.environment !== this.connection.environment
+    ) {
+      throw new Error("The active Dataverse connection changed. Review the target and try again.");
+    }
+  }
+
+  private async getWritableResource(
+    webResourceId: string,
+    expectedName?: string,
+  ): Promise<Record<string, unknown>> {
+    await this.assertActiveConnection();
+    const resource = await this.dvApi.retrieve("webresource", webResourceId, [
+      "webresourceid",
+      "name",
+      "displayname",
+      "iscustomizable",
+    ]);
+
+    const customizableField = resource.iscustomizable as { Value?: boolean } | boolean | undefined;
+    const isCustomizable =
+      typeof customizableField === "boolean" ? customizableField : customizableField?.Value;
+    if (isCustomizable !== true) {
+      throw new Error(`Web resource ${webResourceId} no longer exists or is not customizable.`);
+    }
+
+    if (expectedName && resource.name !== expectedName) {
+      throw new Error(
+        `Web resource ${webResourceId} changed since it was reviewed. Refresh the resource and review the change again.`,
+      );
+    }
+    return resource;
   }
 
   async getSolutions(managed: boolean): Promise<SolutionMeta[]> {
@@ -77,7 +156,7 @@ export class dvService {
             pageNumber = parseInt(pageNumberMatch[1], 10);
           }
         } catch (err) {
-          console.log("Error processing paging cookie:", err);
+          this.onLog(`Error processing paging cookie: ${err}`, "warning");
         }
       }
 
@@ -94,7 +173,10 @@ export class dvService {
       const prefixFilterXml = prefixes.length
         ? [
             "    <filter type='and'>",
-            ...prefixes.map((p) => `      <condition attribute='name' operator='not-like' value='${p}%'/>`),
+            ...prefixes.map(
+              (p) =>
+                `      <condition attribute='name' operator='not-like' value='${escapeXmlAttribute(p)}%'/>`,
+            ),
             "    </filter>",
           ].join("\n")
         : "";
@@ -124,7 +206,7 @@ export class dvService {
         "    <link-entity name='solutioncomponent' from='objectid' to='webresourceid' link-type='inner' alias='sc'>",
         "      <filter>",
         "        <condition attribute='solutionid' operator='eq' value='",
-        solutionId,
+        escapeXmlAttribute(solutionId),
         "'/>",
         "      </filter>",
         "    </link-entity>",
@@ -172,15 +254,12 @@ export class dvService {
     if (!this.connection) {
       throw new Error("No connection available");
     }
-    console.log(
-      "Fetching content for web resource",
-      `webresourceset(${webResourceId})/Microsoft.Dynamics.CRM.RetrieveUnpublished()?$select=content`,
-    );
+    await this.assertActiveConnection();
     const data = await this.dvApi.queryData(
       `webresourceset(${webResourceId})/Microsoft.Dynamics.CRM.RetrieveUnpublished()?$select=content`,
     );
     const content = (data as any)?.content ?? (data as any)?.value?.[0]?.content ?? null;
-    if (!content) {
+    if (content === null || content === undefined) {
       this.onLog("No web resource content returned", "warning");
       return null;
     }
@@ -188,19 +267,28 @@ export class dvService {
     return content as string;
   }
 
-  async saveWebResourceContent(webResourceId: string, content: string): Promise<void> {
-    if (!this.connection) {
-      throw new Error("No connection available");
-    }
-
+  async saveWebResourceContent(
+    webResourceId: string,
+    content: string,
+    expectedName: string,
+    contentIsBase64 = false,
+    expectedServerContent?: string,
+  ): Promise<void> {
     try {
-      // Encode the string content to base64
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(content);
-      const base64Content = btoa(String.fromCharCode(...bytes));
+      await this.getWritableResource(webResourceId, expectedName);
+      await this.assertActiveConnection();
+      if (expectedServerContent !== undefined) {
+        const currentServerContent = await this.getWebResourceContent(webResourceId);
+        if (currentServerContent !== expectedServerContent) {
+          throw new Error(
+            "The web resource changed after its backup was created. No changes were saved; refresh the resource and review it again.",
+          );
+        }
+        await this.assertActiveConnection();
+      }
 
       await this.dvApi.update("webresource", webResourceId, {
-        content: base64Content,
+        content: contentIsBase64 ? content : encodeBase64(content),
       });
 
       this.onLog("Web resource saved successfully", "success");
@@ -210,30 +298,104 @@ export class dvService {
     }
   }
 
-  async renameWebResource(webResourceId: string, newName: string, newDisplayName: string): Promise<void> {
-    if (!this.connection) {
-      throw new Error("No connection available");
-    }
+  async renameWebResources(changes: WebResourceRename[], signal?: AbortSignal): Promise<void> {
+    if (changes.length === 0) return;
 
+    const completed: Array<{ change: WebResourceRename; originalDisplayName: unknown }> = [];
+    let uncertainChange: string | null = null;
     try {
-      await this.dvApi.update("webresource", webResourceId, {
-        name: newName,
-        displayname: newDisplayName,
-      });
-      this.onLog("Web resource renamed successfully", "success");
-    } catch (err) {
-      this.onLog(`Error renaming web resource: ${err}`, "error");
-      throw err;
+      for (const change of changes) {
+        if (signal?.aborted) {
+          throw new Error("Rename cancelled before the next resource was changed.");
+        }
+        const current = await this.getWritableResource(change.id, change.oldName);
+        await this.assertActiveConnection();
+        if (signal?.aborted) {
+          throw new Error("Rename cancelled before the next resource was changed.");
+        }
+        try {
+          await this.dvApi.update("webresource", change.id, {
+            name: change.newName,
+            displayname: change.newName,
+          });
+        } catch (error) {
+          try {
+            const latest = await this.getWritableResource(change.id);
+            if (latest.name === change.newName) {
+              completed.push({ change, originalDisplayName: current.displayname });
+            } else if (latest.name !== change.oldName) {
+              uncertainChange = `${change.oldName}: current name is ${String(latest.name)}`;
+            }
+          } catch (validationError) {
+            uncertainChange = `${change.oldName}: current state could not be verified (${validationError})`;
+          }
+          throw error;
+        }
+        completed.push({ change, originalDisplayName: current.displayname });
+      }
+      this.onLog(`Renamed ${changes.length} web resource${changes.length === 1 ? "" : "s"}`, "success");
+    } catch (error) {
+      if (completed.length === 0 && !uncertainChange) {
+        if (signal?.aborted) {
+          const message = "Rename cancelled before any resource changes were applied.";
+          this.onLog(message, "warning");
+          throw new Error(message, { cause: error });
+        }
+        this.onLog(`Rename failed: ${error}`, "error");
+        throw error;
+      }
+
+      const completedCount = completed.length;
+      const rollbackFailures: string[] = uncertainChange ? [uncertainChange] : [];
+      for (const { change, originalDisplayName } of completed.reverse()) {
+        try {
+          await this.getWritableResource(change.id, change.newName);
+          await this.assertActiveConnection();
+          await this.dvApi.update("webresource", change.id, {
+            name: change.oldName,
+            displayname: originalDisplayName,
+          });
+        } catch (rollbackError) {
+          rollbackFailures.push(`${change.oldName}: ${rollbackError}`);
+        }
+      }
+
+      const action = signal?.aborted ? "Rename cancelled" : "Rename failed";
+      const causeMessage = error instanceof Error ? error.message : String(error);
+      const message =
+        rollbackFailures.length > 0
+          ? `${action} after ${completedCount} of ${changes.length} resources because: ${causeMessage}. Rollback was incomplete for: ${rollbackFailures.join("; ")}`
+          : `${action} because: ${causeMessage}. ${completedCount} completed change${completedCount === 1 ? " was" : "s were"} rolled back.`;
+      this.onLog(message, rollbackFailures.length > 0 ? "error" : signal?.aborted ? "warning" : "error");
+      throw new Error(message, { cause: error });
     }
   }
 
-  async publishWebResource(webResourceId: string): Promise<void> {
-    this.onLog("Publishing web resource...", "info");
-    if (!this.connection) {
-      throw new Error("No connection available");
+  async getWebResourceNameStates(ids: string[]): Promise<WebResourceNameState[]> {
+    if (ids.length === 0) return [];
+    await this.assertActiveConnection();
+    const states: WebResourceNameState[] = [];
+    for (const id of ids) {
+      await this.assertActiveConnection();
+      const resource = await this.dvApi.retrieve("webresource", id, ["webresourceid", "name", "displayname"]);
+      if (typeof resource.name !== "string") {
+        throw new Error(`Could not determine the current name for web resource ${id}.`);
+      }
+      states.push({
+        id,
+        name: resource.name,
+        displayName: typeof resource.displayname === "string" ? resource.displayname : null,
+      });
     }
+    return states;
+  }
+
+  async publishWebResource(webResourceId: string, expectedName: string): Promise<void> {
+    this.onLog("Publishing web resource...", "info");
 
     try {
+      await this.getWritableResource(webResourceId, expectedName);
+      await this.assertActiveConnection();
       const publishXml = `<importexportxml><webresources><webresource>{${webResourceId}}</webresource></webresources></importexportxml>`;
       await this.dvApi.execute({
         operationName: "PublishXml",
@@ -251,13 +413,21 @@ export class dvService {
     name: string,
     displayName: string,
     type: number,
+    solutionId: string,
     solutionUniqueName: string,
   ): Promise<string> {
-    if (!this.connection) {
-      throw new Error("No connection available");
-    }
-
+    let createdResourceId: string | null = null;
     try {
+      await this.assertActiveConnection();
+      const solution = await this.dvApi.retrieve("solution", solutionId, [
+        "solutionid",
+        "uniquename",
+        "ismanaged",
+      ]);
+      if (solution.uniquename !== solutionUniqueName || solution.ismanaged !== false) {
+        throw new Error("The selected solution changed or is not an unmanaged solution.");
+      }
+      await this.assertActiveConnection();
       const result = await this.dvApi.create("webresource", {
         name,
         displayname: displayName,
@@ -265,7 +435,21 @@ export class dvService {
         content: btoa(" "),
       });
       const id = (result as any)?.id ?? result;
+      if (typeof id !== "string" || !id) {
+        throw new Error("Dataverse did not return an ID for the created web resource.");
+      }
+      createdResourceId = id;
 
+      await this.assertActiveConnection();
+      const currentSolution = await this.dvApi.retrieve("solution", solutionId, [
+        "solutionid",
+        "uniquename",
+        "ismanaged",
+      ]);
+      if (currentSolution.uniquename !== solutionUniqueName || currentSolution.ismanaged !== false) {
+        throw new Error("The selected solution changed before the resource could be added.");
+      }
+      await this.assertActiveConnection();
       // Add the new resource to the solution
       await this.dvApi.execute({
         operationName: "AddSolutionComponent",
@@ -281,13 +465,19 @@ export class dvService {
       this.onLog(`Created web resource: ${name}`, "success");
       return id;
     } catch (err) {
+      if (createdResourceId) {
+        try {
+          await this.assertActiveConnection();
+          await this.dvApi.delete("webresource", createdResourceId);
+        } catch (rollbackError) {
+          const message = `Failed to add ${name} to the solution, and automatic cleanup failed for created resource ${createdResourceId}: ${rollbackError}`;
+          this.onLog(message, "error");
+          throw new Error(message, { cause: err });
+        }
+      }
       this.onLog(`Error creating web resource: ${err}`, "error");
       throw err;
     }
-  }
-
-  async deleteRelationship() {
-    this.dvApi.delete("relationshipdefinition", "c8273702-1614-f111-8341-6045bd0a6647");
   }
 
   private escapePagingCookie(cookie: string): string {
