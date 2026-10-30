@@ -57,7 +57,7 @@ interface NewResourceDialogProps {
   open: boolean;
   folder: string;
   vm: ViewModel;
-  dvSvc: dvService;
+  dvSvc: dvService | null;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
   onClose: () => void;
 }
@@ -71,7 +71,7 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
     const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
 
     const handleCreate = useCallback(() => {
-      if (!name.trim() || !vm.selectedSolution) return;
+      if (!name.trim() || !vm.selectedSolution || !dvSvc) return;
       const connection = dvSvc.connection;
       if (!connection) return;
       const ext = extensionForType[type] ?? "";
@@ -94,7 +94,7 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
     }, [name, displayName, type, folder, vm, dvSvc]);
 
     const confirmCreate = useCallback(async () => {
-      if (!pendingCreate) return;
+      if (!pendingCreate || !dvSvc) return;
       setCreating(true);
       try {
         if (!isSameWriteTarget(dvSvc.connection, pendingCreate.target)) {
@@ -202,7 +202,7 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
               <Button
                 appearance="primary"
                 onClick={handleCreate}
-                disabled={!name.trim() || !vm.selectedSolution || !dvSvc.connection || creating}
+                disabled={!name.trim() || !vm.selectedSolution || !dvSvc?.connection || creating}
               >
                 Review
               </Button>
@@ -219,7 +219,7 @@ export const NewResourceDialog: React.FC<NewResourceDialogProps> = observer(
           title="Review new web resource"
           actionLabel={creating ? "Creating..." : "Confirm create"}
           target={pendingCreate.target}
-          connectionMatches={isSameWriteTarget(dvSvc.connection, pendingCreate.target)}
+          connectionMatches={!!dvSvc && isSameWriteTarget(dvSvc.connection, pendingCreate.target)}
           changes={[
             `Create ${pendingCreate.name} (${resourceTypeOptions.find((option) => option.type === pendingCreate.type)?.label ?? "web resource"})`,
             `Add it to solution ${pendingCreate.solutionName} (${pendingCreate.solutionUniqueName})`,

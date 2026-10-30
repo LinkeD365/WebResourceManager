@@ -23,9 +23,9 @@
 ## Test organization
 
 - `tests/viewModel.test.ts`: filtering, tree construction, virtual folders, selection, and tab state transitions.
-- `tests/dataverseService.test.ts`: request construction, pagination, content encoding, fresh target validation, write errors, cancellation, and rename rollback.
+- `tests/dataverseService.test.ts`: request construction, pagination, content encoding, fresh target validation, stale-backup conflicts, write errors, cancellation, and rename rollback metadata/error reporting.
 - `tests/useToolboxAPI.test.tsx`: connection loading, host events, and bounded event-log state.
-- `tests/*Dialog.test.tsx`, `tests/*Tree.test.tsx`, and `tests/*Manager.test.tsx`: UI flows, scope previews, confirmations, and host interactions.
+- `tests/*Dialog.test.tsx`, `tests/*Tree.test.tsx`, and `tests/*Manager.test.tsx`: UI flows, nullable-service behavior, scope previews, backup freshness, rename reconciliation, confirmations, and host interactions.
 - `tests/*Viewer.test.tsx` and `tests/sanitizeSvg.test.ts`: code, image, sanitized SVG, and RESX rendering/edit behavior.
 - `tests/factories.ts` and `tests/setup.ts`: shared fake host/service objects and jsdom/testing-library setup.
 
@@ -45,6 +45,8 @@ All test files and shared test scripts live together in `tests/`. Tests use Vite
 Releases follow the Release Please flow used by BulkDataStudio. The package and release manifest baseline is `1.0.0`. Use Conventional Commit messages so Release Please can determine the next version: `fix:` for patch releases, `feat:` for minor releases, and a breaking-change footer or `!` marker for major releases. Commits pushed to `main` drive a Release Please pull request that updates the package version and changelog. Merge the reviewed release pull request to create the release tag; the release workflow then installs from the shrinkwrap, runs tests, type-checking, validation, audit, and build, and publishes the tagged package to npm with provenance.
 
 The CI workflow runs the same quality checks for pull requests and pushes to `main`. Publishing requires the GitHub `npm` environment to be configured for npm trusted publishing/provenance. Do not publish manually as part of normal release flow.
+
+Configure a repository secret named `RELEASE_PLEASE_TOKEN` with a GitHub App installation token or fine-grained personal access token that can write contents, issues, and pull requests. Release Please uses this token so its generated release pull requests trigger the normal pull-request CI checks. The workflow can create/update the release pull request without that secret only if a token is otherwise supplied, but generated PR checks will not be triggered by the default `GITHUB_TOKEN`.
 
 ## External verification still required
 

@@ -141,16 +141,38 @@ describe("dvService", () => {
     expect(api.update).toHaveBeenCalledWith("webresource", "image-id", { content: "aGVsbG8=" });
   });
 
+  it("rejects a save when server content changed after the backup snapshot", async () => {
+    const { api, service } = createHarness();
+    vi.mocked(api.retrieve).mockResolvedValueOnce({
+      name: "script.js",
+      iscustomizable: { Value: true },
+    });
+    vi.mocked(api.queryData).mockResolvedValueOnce({
+      value: [{ content: "bmV3LXNlcnZlci1jb250ZW50" }],
+    });
+
+    await expect(
+      service.saveWebResourceContent(
+        "wr-1",
+        "replacement",
+        "script.js",
+        false,
+        "b2xkLXNlcnZlci1jb250ZW50",
+      ),
+    ).rejects.toThrow("changed after its backup was created");
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
   it("rolls back earlier folder renames when a later update fails", async () => {
     const { api, service } = createHarness();
     const records: Record<string, Array<Record<string, unknown>>> = {
       "1": [
-        { name: "old/a.js", iscustomizable: { Value: true } },
-        { name: "new/a.js", iscustomizable: { Value: true } },
+        { name: "old/a.js", displayname: null, iscustomizable: { Value: true } },
+        { name: "new/a.js", displayname: "New label", iscustomizable: { Value: true } },
       ],
       "2": [
-        { name: "old/b.js", iscustomizable: { Value: true } },
-        { name: "old/b.js", iscustomizable: { Value: true } },
+        { name: "old/b.js", displayname: "B", iscustomizable: { Value: true } },
+        { name: "old/b.js", displayname: "B", iscustomizable: { Value: true } },
       ],
     };
     vi.mocked(api.retrieve).mockImplementation(async (_entity, id) => records[id].shift() ?? {});
@@ -168,16 +190,36 @@ describe("dvService", () => {
 
     expect(api.update).toHaveBeenNthCalledWith(3, "webresource", "1", {
       name: "old/a.js",
-      displayname: "A",
+      displayname: null,
     });
+  });
+
+  it("reports both the original rename error and rollback failure", async () => {
+    const { api, service } = createHarness();
+    vi.mocked(api.retrieve)
+      .mockResolvedValueOnce({ name: "old/a.js", displayname: "A", iscustomizable: { Value: true } })
+      .mockResolvedValueOnce({ name: "old/b.js", displayname: "B", iscustomizable: { Value: true } })
+      .mockResolvedValueOnce({ name: "old/b.js", displayname: "B", iscustomizable: { Value: true } })
+      .mockResolvedValueOnce({ name: "new/a.js", displayname: "New A", iscustomizable: { Value: true } });
+    vi.mocked(api.update)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("original rename conflict"))
+      .mockRejectedValueOnce(new Error("rollback permission denied"));
+
+    await expect(
+      service.renameWebResources([
+        { id: "1", oldName: "old/a.js", oldDisplayName: "A", newName: "new/a.js" },
+        { id: "2", oldName: "old/b.js", oldDisplayName: "B", newName: "new/b.js" },
+      ]),
+    ).rejects.toThrow(/original rename conflict.*rollback permission denied/);
   });
 
   it("cancels a folder rename between requests and rolls back completed changes", async () => {
     const { api, service } = createHarness();
     const controller = new AbortController();
     vi.mocked(api.retrieve)
-      .mockResolvedValueOnce({ name: "old/a.js", iscustomizable: { Value: true } })
-      .mockResolvedValueOnce({ name: "new/a.js", iscustomizable: { Value: true } });
+      .mockResolvedValueOnce({ name: "old/a.js", displayname: null, iscustomizable: { Value: true } })
+      .mockResolvedValueOnce({ name: "new/a.js", displayname: "New A", iscustomizable: { Value: true } });
     vi.mocked(api.update)
       .mockImplementationOnce(async () => {
         controller.abort();
@@ -192,12 +234,12 @@ describe("dvService", () => {
         ],
         controller.signal,
       ),
-    ).rejects.toThrow("Rename cancelled. 1 completed change was rolled back.");
+    ).rejects.toThrow(/Rename cancelled.*1 completed change was rolled back/);
 
     expect(api.retrieve).toHaveBeenCalledTimes(2);
     expect(api.update).toHaveBeenNthCalledWith(2, "webresource", "1", {
       name: "old/a.js",
-      displayname: "A",
+      displayname: null,
     });
   });
 

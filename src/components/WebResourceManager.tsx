@@ -42,7 +42,7 @@ type PendingWrite = {
 
 interface WebResourceManagerProps {
   connection: ToolBoxAPI.DataverseConnection | null;
-  dvSvc: dvService;
+  dvSvc: dvService | null;
   vm: ViewModel;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
 }
@@ -59,6 +59,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backupServerContentsRef = useRef(new Map<string, string>());
 
   const handleSearchChange = useCallback(
     (_: any, data: { value: string }) => {
@@ -244,6 +245,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
 
   const requestWriteConfirmation = (action: PendingWrite["action"]) => {
     if (!connection || !vm.selectedResource) return;
+    backupServerContentsRef.current.delete(vm.selectedResource.id);
     setPendingWrite({
       action,
       resource: vm.selectedResource,
@@ -257,28 +259,53 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
   };
 
   const exportOriginalBackup = async (resource: WebResource): Promise<string | null> => {
+    if (!dvSvc) throw new Error("No active Dataverse connection is available to create a backup.");
     if (resource.originalContent === null) {
       throw new Error("The original resource content is unavailable; a backup cannot be created.");
     }
 
+    const serverContent = await dvSvc.getWebResourceContent(resource.id);
+    if (serverContent === null) {
+      throw new Error("Dataverse returned no current content; a backup cannot be created.");
+    }
+
+    const isBinary = [5, 6, 7].includes(resource.type);
+    let currentContent = serverContent;
+    if (!isBinary) {
+      try {
+        const bytes = Uint8Array.from(atob(serverContent), (character) => character.charCodeAt(0));
+        currentContent = new TextDecoder("utf-8").decode(bytes);
+      } catch {
+        throw new Error("Dataverse returned content that could not be decoded; no backup was created.");
+      }
+    }
+    if (currentContent !== resource.originalContent) {
+      throw new Error(
+        "The web resource changed since it was loaded. Refresh it before creating a backup or saving.",
+      );
+    }
+
     const config = getResourceFileConfig(resource.type);
-    const content = [5, 6, 7].includes(resource.type)
-      ? Uint8Array.from(atob(resource.originalContent), (character) => character.charCodeAt(0))
-      : resource.originalContent;
+    const content = isBinary
+      ? Uint8Array.from(atob(serverContent), (character) => character.charCodeAt(0))
+      : currentContent;
     const defaultName = `${resource.fileName}.backup.${config.extension}`;
-    return window.toolboxAPI.fileSystem.saveFile(defaultName, content, [
+    const backupPath = await window.toolboxAPI.fileSystem.saveFile(defaultName, content, [
       { name: `${config.label} backup`, extensions: [config.extension] },
     ]);
+    if (backupPath) backupServerContentsRef.current.set(resource.id, serverContent);
+    return backupPath;
   };
 
   const confirmPendingWrite = async () => {
-    if (!pendingWrite) return;
+    if (!pendingWrite || !dvSvc) return;
     if (!isSameWriteTarget(connection, pendingWrite.target)) {
       onLog("The active connection changed. Review the operation again before writing.", "error");
       return;
     }
 
     const { action, resource } = pendingWrite;
+    const expectedServerContent = backupServerContentsRef.current.get(resource.id);
     if (resource.stringContent === null) {
       onLog("Resource content is unavailable. No Dataverse change was made.", "error");
       setPendingWrite(null);
@@ -289,11 +316,15 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
     resource.isSaving = true;
     try {
       if (action === "save" || (action === "save-publish" && resource.isDirty)) {
+        if (expectedServerContent === undefined) {
+          throw new Error("Create a fresh backup before saving this resource.");
+        }
         await dvSvc.saveWebResourceContent(
           resource.id,
           resource.stringContent,
           resource.name,
           [5, 6, 7].includes(resource.type),
+          expectedServerContent,
         );
         resource.markClean();
       }
@@ -325,6 +356,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
       resource.isSaving = false;
       setIsConfirmingWrite(false);
       setPendingWrite(null);
+      backupServerContentsRef.current.delete(resource.id);
     }
   };
 
@@ -525,14 +557,16 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <WebResourceDetails
-            vm={vm}
-            dvSvc={dvSvc}
-            onLog={onLog}
-            drawerOpen={drawerOpen}
-            onToggleDrawer={() => setDrawerOpen((open) => !open)}
-            codeSearchTrigger={codeSearchTrigger}
-          />
+          {dvSvc && (
+            <WebResourceDetails
+              vm={vm}
+              dvSvc={dvSvc}
+              onLog={onLog}
+              drawerOpen={drawerOpen}
+              onToggleDrawer={() => setDrawerOpen((open) => !open)}
+              codeSearchTrigger={codeSearchTrigger}
+            />
+          )}
         </div>
       </div>
       {pendingWrite && (
@@ -555,6 +589,7 @@ export const WebResourceManager = observer((props: WebResourceManagerProps): Rea
           target={pendingWrite.target}
           connectionMatches={
             isSameWriteTarget(connection, pendingWrite.target) &&
+            !!dvSvc &&
             isSameWriteTarget(dvSvc.connection, pendingWrite.target)
           }
           changes={[

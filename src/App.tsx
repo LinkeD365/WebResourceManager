@@ -140,7 +140,7 @@ function App() {
       className={styles.root}
       applyStylesToPortals={false}
     >
-      <WebResourceManager connection={connection} dvSvc={dvSvc!} vm={vm} onLog={addLog} />
+      <WebResourceManager connection={connection} dvSvc={dvSvc} vm={vm} onLog={addLog} />
     </FluentProvider>
   );
 }

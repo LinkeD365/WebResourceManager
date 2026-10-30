@@ -50,6 +50,7 @@ describe("WebResourceManager", () => {
         "const changed = true;",
         "folder/sample.js",
         false,
+        "b3JpZ2luYWw=",
       ),
     );
     expect(resource.isDirty).toBe(false);
@@ -84,7 +85,13 @@ describe("WebResourceManager", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm save and publish" }));
 
     await waitFor(() => expect(service.publishWebResource).toHaveBeenCalledWith("resource-1", "sample.js"));
-    expect(service.saveWebResourceContent).toHaveBeenCalledWith("resource-1", "changed", "sample.js", false);
+    expect(service.saveWebResourceContent).toHaveBeenCalledWith(
+      "resource-1",
+      "changed",
+      "sample.js",
+      false,
+      "b3JpZ2luYWw=",
+    );
     expect(resource.isSavedNotPublished).toBe(false);
   });
 
@@ -94,7 +101,7 @@ describe("WebResourceManager", () => {
     const resource = createResource("image-1", "sample.png", 5, "aGVsbG8=");
     resource.stringContent = "d29ybGQ=";
     vm.openTab(resource);
-    const service = createDvService();
+    const service = createDvService({ getWebResourceContent: vi.fn().mockResolvedValue("aGVsbG8=") });
     renderManager(vm, service);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -112,7 +119,39 @@ describe("WebResourceManager", () => {
         "d29ybGQ=",
         "sample.png",
         true,
+        "aGVsbG8=",
       ),
     );
+  });
+
+  it("refuses a backup when the server content differs from the loaded editor version", async () => {
+    const toolboxAPI = installToolboxApi();
+    const vm = new ViewModel();
+    const resource = createResource();
+    resource.stringContent = "changed";
+    vm.openTab(resource);
+    const service = createDvService({
+      getWebResourceContent: vi.fn().mockResolvedValue("c2VydmVyIGNoYW5nZWQ="),
+    });
+    renderManager(vm, service);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export backup" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("changed since it was loaded");
+    expect(toolboxAPI.fileSystem.saveFile).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirm save" })).toBeDisabled();
+    expect(service.saveWebResourceContent).not.toHaveBeenCalled();
+  });
+
+  it("renders safely when the Dataverse service is unavailable", () => {
+    installToolboxApi();
+    render(
+      <FluentProvider theme={webLightTheme}>
+        <WebResourceManager connection={null} dvSvc={null} vm={new ViewModel()} onLog={vi.fn()} />
+      </FluentProvider>,
+    );
+
+    expect(screen.getByText("Select a solution to view web resources")).toBeInTheDocument();
   });
 });

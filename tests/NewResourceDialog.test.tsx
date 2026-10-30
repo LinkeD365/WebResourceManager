@@ -4,6 +4,21 @@ import { NewResourceDialog } from "../src/components/NewResourceDialog";
 import { createDvService, createViewModel, installToolboxApi } from "./factories";
 
 describe("NewResourceDialog", () => {
+  it("renders safely when the Dataverse service is unavailable", () => {
+    render(
+      <NewResourceDialog
+        open
+        folder=""
+        vm={createViewModel()}
+        dvSvc={null}
+        onLog={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Review" })).toBeDisabled();
+  });
+
   it("previews the environment, resource name, and solution before creating", async () => {
     const service = createDvService();
     const vm = createViewModel();

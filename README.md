@@ -52,7 +52,7 @@ A [Power Platform ToolBox](https://powerplatformtoolbox.com) tool for browsing, 
 
 All editing actions are disabled for non-customizable (managed layer) resources.
 
-Before a Dataverse write, the tool shows the target environment and affected resource or solution. Replacing resource content requires exporting a backup first. Restore is manual; publishing cannot be automatically undone. Folder renames attempt to roll back completed renames if a later resource fails.
+Before a Dataverse write, the tool shows the target environment and affected resource or solution. Replacing resource content requires exporting the current server version as a backup first; the save is rejected if the loaded or backed-up version is stale. Restore is manual; publishing cannot be automatically undone. Folder renames attempt to roll back completed renames if a later resource fails, and the tree is reconciled with Dataverse if rollback is incomplete.
 
 ### Context Menu (Tree View)
 
@@ -81,7 +81,7 @@ Right-click any item in the tree to access contextual actions:
 - Exports files to the local computer and reads explicitly selected files for upload.
 - Keeps virtual folders only in the current tool session; they do not change Dataverse.
 
-The target environment name and URL are shown before confirmation, including for production environments. There is no automatic undo after a successful create, content save, or publish. Before replacing content, export the offered backup and retain it if you may need to restore the previous version. A failed create attempts to delete the new resource if adding it to the solution fails. A folder rename can be cancelled between Dataverse requests; completed renames are rolled back on cancellation or failure where possible, and incomplete rollback is reported.
+The target environment name and URL are shown before confirmation, including for production environments. There is no automatic undo after a successful create, content save, or publish. Before replacing content, export the offered current-version backup and retain it if you may need to restore the previous version. A failed create attempts to delete the new resource if adding it to the solution fails. A folder rename can be cancelled between Dataverse requests; completed renames are rolled back on cancellation or failure where possible, and incomplete rollback is reported and reconciled without discarding unsaved editor content.
 
 ## Credits
 

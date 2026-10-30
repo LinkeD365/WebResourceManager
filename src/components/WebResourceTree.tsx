@@ -46,7 +46,7 @@ const getIconForResourceType = (type: number): React.ReactNode => {
 
 interface WebResourceTreeProps {
   vm: ViewModel;
-  dvSvc: dvService;
+  dvSvc: dvService | null;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
 }
 
@@ -102,7 +102,11 @@ export const WebResourceTree = observer((props: WebResourceTreeProps): React.JSX
         vm.showHidden,
         pagingCookie,
       );
-      const allResources = [...existingResources, ...result.resources];
+      const resourcesById = new Map(existingResources.map((resource) => [resource.id, resource]));
+      for (const resource of result.resources) {
+        if (!resourcesById.has(resource.id)) resourcesById.set(resource.id, resource);
+      }
+      const allResources = [...resourcesById.values()];
 
       // Update the tree immediately with resources loaded so far
       vm.setWebResources(allResources);
@@ -388,12 +392,31 @@ export const WebResourceTree = observer((props: WebResourceTreeProps): React.JSX
     } catch (error) {
       const cancelled = abortController.signal.aborted;
       onLog(`${cancelled ? "Rename cancelled" : "Failed to rename"}: ${error}`, cancelled ? "warning" : "error");
+      try {
+        const states = await dvSvc.getWebResourceNameStates(pendingRename.changes.map((change) => change.id));
+        const statesById = new Map(states.map((state) => [state.id, state]));
+        for (const resource of vm.webResources) {
+          const state = statesById.get(resource.id);
+          if (!state) continue;
+          resource.name = state.name;
+          resource.path = state.name;
+          resource.displayName = state.displayName ?? state.name;
+        }
+        vm.buildWebResourceTree();
+      } catch (reconcileError) {
+        onLog(`Could not reconcile resource names after the rename failure: ${reconcileError}`, "error");
+        await window.toolboxAPI.utils.showNotification({
+          title: "Rename Reconciliation Failed",
+          body: `The rename failed and the tree may not match Dataverse. Refresh the solution before trying again: ${reconcileError}`,
+          type: "error",
+        });
+      }
       await window.toolboxAPI.utils.showNotification({
         title: cancelled ? "Rename Cancelled" : "Rename Failed",
         body: `${cancelled ? "Rename cancelled" : "Failed to rename"}: ${error}`,
         type: cancelled ? "warning" : "error",
       });
-      if (cancelled) setPendingRename(null);
+      setPendingRename(null);
     } finally {
       renameAbortControllerRef.current = null;
       setRenaming(false);
@@ -704,7 +727,7 @@ export const WebResourceTree = observer((props: WebResourceTreeProps): React.JSX
           title={pendingRename.kind === "folder" ? "Review folder rename" : "Review resource rename"}
           actionLabel={renaming ? "Renaming..." : "Confirm rename"}
           target={pendingRename.target}
-          connectionMatches={isSameWriteTarget(dvSvc.connection, pendingRename.target)}
+          connectionMatches={!!dvSvc && isSameWriteTarget(dvSvc.connection, pendingRename.target)}
           changes={pendingRename.summary}
           rollbackNotice="The tool attempts to roll back completed renames if a later resource fails. If rollback is incomplete, the failure message identifies that outcome; no separate backup is created."
           onConfirm={confirmPendingRename}

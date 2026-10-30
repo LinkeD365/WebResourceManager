@@ -5,6 +5,12 @@ export interface WebResourcesResult {
   pagingCookie?: string;
 }
 
+export interface WebResourceNameState {
+  id: string;
+  name: string;
+  displayName: string | null;
+}
+
 interface dvServiceProps {
   connection: ToolBoxAPI.DataverseConnection | null;
   dvApi: DataverseAPI.API;
@@ -248,11 +254,12 @@ export class dvService {
     if (!this.connection) {
       throw new Error("No connection available");
     }
+    await this.assertActiveConnection();
     const data = await this.dvApi.queryData(
       `webresourceset(${webResourceId})/Microsoft.Dynamics.CRM.RetrieveUnpublished()?$select=content`,
     );
     const content = (data as any)?.content ?? (data as any)?.value?.[0]?.content ?? null;
-    if (!content) {
+    if (content === null || content === undefined) {
       this.onLog("No web resource content returned", "warning");
       return null;
     }
@@ -265,10 +272,20 @@ export class dvService {
     content: string,
     expectedName: string,
     contentIsBase64 = false,
+    expectedServerContent?: string,
   ): Promise<void> {
     try {
       await this.getWritableResource(webResourceId, expectedName);
       await this.assertActiveConnection();
+      if (expectedServerContent !== undefined) {
+        const currentServerContent = await this.getWebResourceContent(webResourceId);
+        if (currentServerContent !== expectedServerContent) {
+          throw new Error(
+            "The web resource changed after its backup was created. No changes were saved; refresh the resource and review it again.",
+          );
+        }
+        await this.assertActiveConnection();
+      }
 
       await this.dvApi.update("webresource", webResourceId, {
         content: contentIsBase64 ? content : encodeBase64(content),
@@ -284,14 +301,14 @@ export class dvService {
   async renameWebResources(changes: WebResourceRename[], signal?: AbortSignal): Promise<void> {
     if (changes.length === 0) return;
 
-    const completed: WebResourceRename[] = [];
+    const completed: Array<{ change: WebResourceRename; originalDisplayName: unknown }> = [];
     let uncertainChange: string | null = null;
     try {
       for (const change of changes) {
         if (signal?.aborted) {
           throw new Error("Rename cancelled before the next resource was changed.");
         }
-        await this.getWritableResource(change.id, change.oldName);
+        const current = await this.getWritableResource(change.id, change.oldName);
         await this.assertActiveConnection();
         if (signal?.aborted) {
           throw new Error("Rename cancelled before the next resource was changed.");
@@ -303,18 +320,18 @@ export class dvService {
           });
         } catch (error) {
           try {
-            const current = await this.getWritableResource(change.id);
-            if (current.name === change.newName) {
-              completed.push(change);
-            } else if (current.name !== change.oldName) {
-              uncertainChange = `${change.oldName}: current name is ${String(current.name)}`;
+            const latest = await this.getWritableResource(change.id);
+            if (latest.name === change.newName) {
+              completed.push({ change, originalDisplayName: current.displayname });
+            } else if (latest.name !== change.oldName) {
+              uncertainChange = `${change.oldName}: current name is ${String(latest.name)}`;
             }
           } catch (validationError) {
             uncertainChange = `${change.oldName}: current state could not be verified (${validationError})`;
           }
           throw error;
         }
-        completed.push(change);
+        completed.push({ change, originalDisplayName: current.displayname });
       }
       this.onLog(`Renamed ${changes.length} web resource${changes.length === 1 ? "" : "s"}`, "success");
     } catch (error) {
@@ -330,13 +347,13 @@ export class dvService {
 
       const completedCount = completed.length;
       const rollbackFailures: string[] = uncertainChange ? [uncertainChange] : [];
-      for (const change of completed.reverse()) {
+      for (const { change, originalDisplayName } of completed.reverse()) {
         try {
-          const current = await this.getWritableResource(change.id, change.newName);
+          await this.getWritableResource(change.id, change.newName);
           await this.assertActiveConnection();
           await this.dvApi.update("webresource", change.id, {
             name: change.oldName,
-            displayname: change.oldDisplayName || String(current.displayname ?? change.oldName),
+            displayname: originalDisplayName,
           });
         } catch (rollbackError) {
           rollbackFailures.push(`${change.oldName}: ${rollbackError}`);
@@ -344,13 +361,33 @@ export class dvService {
       }
 
       const action = signal?.aborted ? "Rename cancelled" : "Rename failed";
+      const causeMessage = error instanceof Error ? error.message : String(error);
       const message =
         rollbackFailures.length > 0
-          ? `${action} after ${completedCount} of ${changes.length} resources. Rollback was incomplete for: ${rollbackFailures.join("; ")}`
-          : `${action}. ${completedCount} completed change${completedCount === 1 ? " was" : "s were"} rolled back.`;
+          ? `${action} after ${completedCount} of ${changes.length} resources because: ${causeMessage}. Rollback was incomplete for: ${rollbackFailures.join("; ")}`
+          : `${action} because: ${causeMessage}. ${completedCount} completed change${completedCount === 1 ? " was" : "s were"} rolled back.`;
       this.onLog(message, rollbackFailures.length > 0 ? "error" : signal?.aborted ? "warning" : "error");
       throw new Error(message, { cause: error });
     }
+  }
+
+  async getWebResourceNameStates(ids: string[]): Promise<WebResourceNameState[]> {
+    if (ids.length === 0) return [];
+    await this.assertActiveConnection();
+    const states: WebResourceNameState[] = [];
+    for (const id of ids) {
+      await this.assertActiveConnection();
+      const resource = await this.dvApi.retrieve("webresource", id, ["webresourceid", "name", "displayname"]);
+      if (typeof resource.name !== "string") {
+        throw new Error(`Could not determine the current name for web resource ${id}.`);
+      }
+      states.push({
+        id,
+        name: resource.name,
+        displayName: typeof resource.displayname === "string" ? resource.displayname : null,
+      });
+    }
+    return states;
   }
 
   async publishWebResource(webResourceId: string, expectedName: string): Promise<void> {
